@@ -5,7 +5,7 @@ import { projectsRouter } from './projects';
 import { uploadRouter } from './upload';
 import { renderRouter } from './render';
 
-const PORT = 3001;
+const PORT = Number(process.env.PORT || 3217);
 const HOST = '127.0.0.1';
 const dataDir = path.resolve(process.cwd(), 'data');
 for (const sub of ['projects', 'uploads', 'renders']) fs.mkdirSync(path.join(dataDir, sub), { recursive: true });

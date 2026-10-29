@@ -1,13 +1,14 @@
 # API 约定
 
-服务仅监听 `127.0.0.1:3001`；Vite(5173) 代理 `/api` 与 `/files`。数据存于 `data/`（已被 git 忽略）。
+服务默认仅监听 `127.0.0.1:3217`；Vite(5173) 代理 `/api` 与 `/files`。数据存于 `data/`（已被 git 忽略）。
+可用 `PORT=3218 npm run dev` 覆盖服务端口，Vite 的两项代理会同步使用该端口；监听地址仍为 `127.0.0.1`。
 
 ## 本地启动与检查
 
 运行 `npm install`、`npm run typecheck`、`npm run build`，然后用 `npm run dev` 同时启动前后端。
 首页为 `http://127.0.0.1:5173/`，编辑器占位为 `/editor/<id>`。
-`curl -f http://127.0.0.1:3001/api/health` 与 `curl -f http://127.0.0.1:5173/api/health` 均应返回 `{"ok":true}`。
-若日志出现 `EADDRINUSE`，先用 `lsof -nP -iTCP:3001 -iTCP:5173 -sTCP:LISTEN` 确认占用进程及所属项目；释放端口后重启 `npm run dev`，不要批量终止 Node/Vite 进程。
+`curl -f http://127.0.0.1:3217/api/health` 与 `curl -f http://127.0.0.1:5173/api/health` 均应返回 `{"ok":true}`。覆盖端口后，相应调整直连 API 的检查地址。
+若日志出现 `EADDRINUSE`，先用 `lsof -nP -iTCP:3217 -iTCP:5173 -sTCP:LISTEN` 确认占用进程及所属项目；API 端口被占用时可通过 `PORT` 改用空闲端口。不要停止无关进程或批量终止 Node/Vite 进程。
 启动失败回归测试：`node --import tsx --test server/index.test.ts`。
 
 当前仅实现健康检查与静态文件服务；下表中项目、上传和渲染接口为后续步骤的契约，对应 Router 暂为空。

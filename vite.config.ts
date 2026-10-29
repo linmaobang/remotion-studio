@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-const target = 'http://127.0.0.1:3001';
+const target = `http://127.0.0.1:${Number(process.env.PORT || 3217)}`;
 
 export default defineConfig({
   plugins: [react()],

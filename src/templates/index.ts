@@ -9,5 +9,6 @@ import crystalOrbit from './crystal-orbit';
 import signalGame from './signal-game';
 import blankTimeline from './blank-timeline';
 import studioCanvas from './studio-canvas';
+import aiVideo from './ai-video';
 
-export const templates: TemplateDef[] = [kineticType, orbitalGrid, processFlow, growthChart, crystalOrbit, signalGame, blankTimeline, studioCanvas];
+export const templates: TemplateDef[] = [kineticType, orbitalGrid, processFlow, growthChart, crystalOrbit, signalGame, blankTimeline, studioCanvas, aiVideo];

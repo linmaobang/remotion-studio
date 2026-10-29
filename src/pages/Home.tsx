@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { templates } from '../templates';
 import type { TemplateDef } from '../templates/registry';
 import type { TemplateMeta } from '../shared/types';
@@ -41,7 +41,7 @@ export default function Home() {
     <div className="home">
       <nav className="home-nav" aria-label="首页导航"><a href="#template-library">模板探索 <span>{templates.length}</span></a><a href="#my-projects">我的项目 ↗</a><span className="home-nav-note">本地创作，自由表达</span></nav>
       <section className="home-hero">
-        <div><span className="home-eyebrow">REMOTION STUDIO / 灵感实验室</span><h1>让一个想法，<br />成为<span>会动的作品。</span></h1><p>从一个模板出发。预览动效、拾取灵感，<br className="home-desktop-break" />再把画面变成你的表达。</p><div className="home-cta">{canvas && <button className="home-primary" disabled={creating !== null} onClick={() => start(canvas)}>开始创作 <span aria-hidden="true">→</span></button>}<a className="home-secondary" href="#template-library">探索模板 <span aria-hidden="true">↓</span></a></div></div>
+        <div><span className="home-eyebrow">REMOTION STUDIO / 灵感实验室</span><h1>让一个想法，<br />成为<span>会动的作品。</span></h1><p>从一个模板出发。预览动效、拾取灵感，<br className="home-desktop-break" />再把画面变成你的表达。</p><div className="home-cta"><Link className="home-primary" to="/create">✨ 文字生成视频</Link>{canvas && <button className="home-primary" disabled={creating !== null} onClick={() => start(canvas)}>开始创作 <span aria-hidden="true">→</span></button>}<a className="home-secondary" href="#template-library">探索模板 <span aria-hidden="true">↓</span></a></div></div>
         <div className="home-hero-art" aria-hidden="true"><div className="home-art-grid" /><span className="home-art-label">IDEA → MOTION</span><div className="home-art-orbit" /><div className="home-art-square" /><div className="home-art-dot" /><span className="home-art-caption">每一帧，都有新的可能。<b>01 / 无限灵感</b></span></div>
       </section>
       {canvas && <section className="home-canvas" aria-labelledby="canvas-title">

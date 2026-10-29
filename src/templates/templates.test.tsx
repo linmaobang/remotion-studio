@@ -7,6 +7,9 @@ import { getTemplate, templates, type TemplateDef } from './registry';
 import { TimelineComposition, schema as timelineSchema } from './blank-timeline';
 import { getClipTransition } from './blank-timeline/transitions';
 import { getGameState } from './signal-game/state';
+import { configOf } from './ai-video';
+import { parsePlan, planDuration, samplePlan } from '../plan/schema';
+import { getRenderInputProps } from '../../server/render';
 
 const markup = (template: TemplateDef, frame: number, inputProps = template.defaultProps) => (
   renderToStaticMarkup(<Player component={template.component} inputProps={inputProps} compositionWidth={template.defaultConfig.width} compositionHeight={template.defaultConfig.height} fps={template.defaultConfig.fps} durationInFrames={template.defaultConfig.durationInFrames} initialFrame={frame} />)
@@ -14,11 +17,11 @@ const markup = (template: TemplateDef, frame: number, inputProps = template.defa
 
 const clip: Clip = { id: 'text', type: 'text', text: '时间线文字', startFrame: 20, durationFrames: 60, trimStartFrame: 0, volume: 0.7, style: { color: '#ff0000' } };
 
-test('八个模板分类齐全、编号唯一，默认参数和颜色均经过 schema 校验', () => {
-  assert.equal(templates.length, 8);
-  assert.equal(new Set(templates.map((t) => t.meta.id)).size, 8);
+test('九个模板分类齐全、编号唯一，默认参数和颜色均经过 schema 校验', () => {
+  assert.equal(templates.length, 9);
+  assert.equal(new Set(templates.map((t) => t.meta.id)).size, 9);
   assert.deepEqual(templates.reduce<Record<string, number>>((counts, t) => ({ ...counts, [t.meta.category]: (counts[t.meta.category] ?? 0) + 1 }), {}), {
-    'Motion graphics': 2, Explainers: 2, '3D 场景': 1, 'Games & interactive': 1, '剪辑': 2,
+    'Motion graphics': 2, Explainers: 3, '3D 场景': 1, 'Games & interactive': 1, '剪辑': 2,
   });
   for (const template of templates) {
     assert.equal(getTemplate(template.meta.id), template);
@@ -97,4 +100,47 @@ test('创作画布对缺省字段的参数也能显示图层（渲染端不应�
   const template = getTemplate('studio-canvas')!;
   const props = { scenes: [{ id: 'a', layers: [{ id: 't', type: 'text', text: '画布文字' }] }] };
   assert.ok(markup(template, 5, props).includes('画布文字'));
+});
+
+const textOf = (html: string) => html.replace(/<[^>]*>/g, '');
+
+test('AI 视频：samplePlan 的每个场景都能在各自时间段渲染并显示文案', () => {
+  const template = getTemplate('ai-video')!;
+  const plan = samplePlan();
+  assert.deepEqual(configOf(plan), { width: 1920, height: 1080, fps: 30, durationInFrames: planDuration(plan) });
+  assert.equal(template.defaultConfig.durationInFrames, 900);
+  const config = { ...template.defaultConfig };
+  let start = 0;
+  for (const scene of plan.scenes) {
+    const html = markup({ ...template, defaultConfig: config }, start + 100, { plan });
+    assert.ok(textOf(html).includes(scene.title.slice(0, 4)), `${scene.kind} 缺少标题`);
+    start += scene.durationFrames;
+  }
+  assert.ok(textOf(markup(template, 540 + 20, { plan })).includes('精选咖啡豆'));
+  assert.notEqual(markup(template, 5, { plan }), markup(template, 60, { plan }));
+});
+
+test('AI 视频：非法方案显示占位而不抛错，竖屏与带音频方案可渲染', () => {
+  const template = getTemplate('ai-video')!;
+  for (const plan of [null, undefined, 42, {}, { scenes: [] }, { scenes: [{ kind: 'bad' }] }]) {
+    assert.ok(markup(template, 0, { plan }).includes('视频方案无效'), JSON.stringify(plan));
+  }
+  assert.ok(markup(template, 0, {} as never).includes('视频方案无效'));
+  const portrait = parsePlan({ format: { width: 1080, height: 1920 }, scenes: [{ kind: 'list', title: '竖屏列表', items: [] }, { kind: 'stat', title: '空数据' }, { kind: 'image-text', title: '无图', body: '' }], audio: { bgm: { src: '/files/uploads/a.mp3' }, voiceover: { src: '/files/uploads/v.mp3', startFrame: 10 } } });
+  assert.ok(portrait.ok);
+  if (portrait.ok) assert.ok(textOf(markup(template, 20, { plan: portrait.plan })).includes('竖屏列表'));
+});
+
+test('AI 视频：服务端把 plan 内以 / 开头的素材地址改写为本机服务地址', () => {
+  const plan = parsePlan({ scenes: [{ kind: 'image-text', title: 'a', imageSrc: '/files/uploads/i.png', backgroundSrc: '/files/uploads/b.png' }, { kind: 'title', title: 'b', backgroundSrc: 'https://example.com/x.png' }], audio: { bgm: { src: '/files/uploads/a.mp3' }, voiceover: { src: '/files/uploads/v.mp3' } } });
+  assert.ok(plan.ok);
+  if (!plan.ok) return;
+  const origin = `http://127.0.0.1:${Number(process.env.PORT || 3217)}`;
+  const input = getRenderInputProps({ id: 'p', name: 'n', templateId: 'ai-video', props: { plan: plan.plan }, width: 1920, height: 1080, fps: 30, durationInFrames: planDuration(plan.plan), updatedAt: '' }).plan as typeof plan.plan;
+  const [first, second] = input.scenes as unknown as [{ imageSrc: string; backgroundSrc: string }, { backgroundSrc: string }];
+  assert.equal(first.imageSrc, `${origin}/files/uploads/i.png`);
+  assert.equal(first.backgroundSrc, `${origin}/files/uploads/b.png`);
+  assert.equal(second.backgroundSrc, 'https://example.com/x.png');
+  assert.equal(input.audio.bgm!.src, `${origin}/files/uploads/a.mp3`);
+  assert.equal(input.audio.voiceover!.src, `${origin}/files/uploads/v.mp3`);
 });

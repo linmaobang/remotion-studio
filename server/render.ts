@@ -22,7 +22,7 @@ const rewriteSources = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(rewriteSources);
   if (value && typeof value === 'object') {
     return Object.fromEntries(Object.entries(value).map(([key, item]) => [key,
-      key === 'src' && typeof item === 'string' && item.startsWith('/')
+      (key === 'src' || key === 'imageSrc' || key === 'backgroundSrc') && typeof item === 'string' && item.startsWith('/')
         ? `http://127.0.0.1:${Number(process.env.PORT || 3217)}${item}` : rewriteSources(item),
     ]));
   }

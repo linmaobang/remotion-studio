@@ -2,6 +2,18 @@
 
 服务仅监听 `127.0.0.1:3001`；Vite(5173) 代理 `/api` 与 `/files`。数据存于 `data/`（已被 git 忽略）。
 
+## 本地启动与检查
+
+运行 `npm install`、`npm run typecheck`、`npm run build`，然后用 `npm run dev` 同时启动前后端。
+首页为 `http://127.0.0.1:5173/`，编辑器占位为 `/editor/<id>`。
+`curl -f http://127.0.0.1:3001/api/health` 与 `curl -f http://127.0.0.1:5173/api/health` 均应返回 `{"ok":true}`。
+若日志出现 `EADDRINUSE`，先用 `lsof -nP -iTCP:3001 -iTCP:5173 -sTCP:LISTEN` 确认占用进程及所属项目；释放端口后重启 `npm run dev`，不要批量终止 Node/Vite 进程。
+启动失败回归测试：`node --import tsx --test server/index.test.ts`。
+
+当前仅实现健康检查与静态文件服务；下表中项目、上传和渲染接口为后续步骤的契约，对应 Router 暂为空。
+
+## 接口
+
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/api/health` | 健康检查 `{ok:true}` |

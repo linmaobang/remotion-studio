@@ -21,6 +21,10 @@ app.use('/api/projects', projectsRouter);
 app.use('/api/upload', uploadRouter);
 app.use('/api/render', renderRouter);
 
-app.listen(PORT, HOST, () => {
+app.listen(PORT, HOST, (error?: Error) => {
+  if (error) {
+    console.error(`API failed to listen on http://${HOST}:${PORT}`, error);
+    process.exit(1);
+  }
   console.log(`API listening on http://${HOST}:${PORT}`);
 });

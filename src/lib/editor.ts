@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { Clip, ProjectData, TimelineState } from '../shared/types';
+import { totalDuration } from '../templates/studio-canvas/model';
 
 export function inputProps(project: ProjectData) {
   return {
@@ -19,6 +20,13 @@ export function timelineOf(project: ProjectData): TimelineState {
 export function withTimeline(project: ProjectData, timeline: TimelineState): ProjectData {
   const durationInFrames = Math.max(1, ...timeline.tracks.flatMap((track) => track.clips.map((clip) => clip.startFrame + clip.durationFrames)));
   return { ...project, timeline, props: { ...project.props, timeline }, durationInFrames };
+}
+
+/** 创作画布的时长由场景总帧数推导，编辑场景后调用以同步 durationInFrames。 */
+export function withStudioDuration(project: ProjectData): ProjectData {
+  const scenes = project.props.scenes;
+  if (!Array.isArray(scenes)) return project;
+  return { ...project, durationInFrames: totalDuration(scenes.filter((scene) => scene && typeof scene.durationFrames === 'number')) };
 }
 
 export function splitClip(clip: Clip, frame: number, id: string): Clip[] {

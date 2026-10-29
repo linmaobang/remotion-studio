@@ -14,11 +14,11 @@ const markup = (template: TemplateDef, frame: number, inputProps = template.defa
 
 const clip: Clip = { id: 'text', type: 'text', text: '时间线文字', startFrame: 20, durationFrames: 60, trimStartFrame: 0, volume: 0.7, style: { color: '#ff0000' } };
 
-test('七个模板分类齐全、编号唯一，默认参数和颜色均经过 schema 校验', () => {
-  assert.equal(templates.length, 7);
-  assert.equal(new Set(templates.map((t) => t.meta.id)).size, 7);
+test('八个模板分类齐全、编号唯一，默认参数和颜色均经过 schema 校验', () => {
+  assert.equal(templates.length, 8);
+  assert.equal(new Set(templates.map((t) => t.meta.id)).size, 8);
   assert.deepEqual(templates.reduce<Record<string, number>>((counts, t) => ({ ...counts, [t.meta.category]: (counts[t.meta.category] ?? 0) + 1 }), {}), {
-    'Motion graphics': 2, Explainers: 2, '3D 场景': 1, 'Games & interactive': 1, '剪辑': 1,
+    'Motion graphics': 2, Explainers: 2, '3D 场景': 1, 'Games & interactive': 1, '剪辑': 2,
   });
   for (const template of templates) {
     assert.equal(getTemplate(template.meta.id), template);
@@ -91,4 +91,10 @@ test('淡入淡出、左右上下滑动及退化转场均有确定边界', () =>
     assert.ok(Number.isFinite(getClipTransition({ ...fade, durationFrames: 1, transitionIn: { type: 'fade', frames } }, 0, 1280, 720).opacity));
   }
   assert.equal(getClipTransition({ ...clip, transitionIn: { type: 'none', frames: 10 } }, 0, 1280, 720).opacity, 1);
+});
+
+test('创作画布对缺省字段的参数也能显示图层（渲染端不应用 schema 默认值）', () => {
+  const template = getTemplate('studio-canvas')!;
+  const props = { scenes: [{ id: 'a', layers: [{ id: 't', type: 'text', text: '画布文字' }] }] };
+  assert.ok(markup(template, 5, props).includes('画布文字'));
 });

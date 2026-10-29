@@ -8,8 +8,10 @@ import Timeline from '../components/editor/Timeline';
 import ExportDialog from '../components/editor/ExportDialog';
 import { useProject } from '../components/editor/useProject';
 import StudioWorkbench from '../components/studio/StudioWorkbench';
+import PlanEditorWorkbench from '../components/planEditor/PlanEditorWorkbench';
 import '../styles/editor.css';
 import '../styles/studio.css';
+import '../styles/planEditor.css';
 
 function ProjectEditor({ id }: { id: string | undefined }) {
   const { project, loading, saving, message, error, update, save } = useProject(id);
@@ -21,6 +23,7 @@ function ProjectEditor({ id }: { id: string | undefined }) {
   const template = project ? getTemplate(project.templateId) : undefined;
   if (loading) return <div className="editor" role="status">正在加载作品…</div>;
   if (!project || !template) return <div className="editor"><p role="alert">{error || '项目使用的模板不存在'}</p><Link to="/">返回首页</Link></div>;
+  if (project.templateId === 'ai-video') return <PlanEditorWorkbench project={project} template={template} playerRef={playerRef} frame={Math.min(frame, Math.max(0, project.durationInFrames - 1))} onFrame={onFrame} seek={seek} onChange={update} save={save} saving={saving} message={message} error={error} />;
   return <div className="editor">
     <header className="editor-header"><div><Link to="/">← 返回首页</Link><h1>{project.name}</h1><span>{template.meta.name}</span></div><div className="editor-toolbar"><button disabled={saving} onClick={() => void save()}>{saving ? '保存中…' : '保存项目'}</button><button className="editor-primary" onClick={() => setExporting(true)}>导出 MP4 ↗</button></div></header>
     <p className="editor-status" role="status">{message}</p>{error && <p className="editor-error" role="alert">{error}</p>}

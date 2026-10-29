@@ -6,6 +6,7 @@ import { ZodError } from 'zod';
 import { projectsRouter } from './projects';
 import { uploadRouter } from './upload';
 import { renderRouter } from './render';
+import { planRouter } from './plan';
 
 const PORT = Number(process.env.PORT || 3217);
 const HOST = '127.0.0.1';
@@ -22,6 +23,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/projects', projectsRouter);
 app.use('/api/upload', uploadRouter);
 app.use('/api/render', renderRouter);
+app.use('/api/plan', planRouter);
 
 app.use(((error, _req, res, _next) => {
   const code = (error as NodeJS.ErrnoException).code;

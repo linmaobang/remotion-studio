@@ -4,7 +4,8 @@ import type { Layer } from '../../templates/studio-canvas/model';
 import { FONT_FAMILIES } from '../../templates/studio-canvas/model';
 import { HANDLES, clientToStage, fitScale, moveRect, nudgeRect, resizeRect, rotateRect, type Handle, type Point, type Rect } from '../../lib/studioGeometry';
 
-type Gesture = { mode: 'move' | 'rotate' | Handle; start: Point; rect: Rect; id: string };
+type Gesture = { mode: 'move' | 'rotate' | Handle; start: Point; rect: Rect; id: string; group: string };
+let gestureCount = 0;
 
 const rectOf = (layer: Layer): Rect => ({ x: layer.x, y: layer.y, width: layer.width, height: layer.height, rotation: layer.rotation });
 const handleClass: Record<Handle, string> = { nw: 'nw', n: 'n', ne: 'ne', e: 'e', se: 'se', s: 's', sw: 'sw', w: 'w' };
@@ -16,7 +17,8 @@ export default function StageOverlay({ layers, frame, width, selectedId, onSelec
   width: number;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
-  onChange: (id: string, patch: Partial<Rect> | { text: string }) => void;
+  /** group 相同的连续修改会被合并为一次撤销记录（一次拖动 = 一个 group） */
+  onChange: (id: string, patch: Partial<Rect> | { text: string }, group?: string) => void;
   onDelete: (id: string) => void;
 }) {
   const root = useRef<HTMLDivElement>(null);
@@ -46,7 +48,7 @@ export default function StageOverlay({ layers, frame, width, selectedId, onSelec
     root.current?.focus();
     onSelect(layer.id);
     try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* 无活动指针（如合成事件）时忽略 */ }
-    gesture.current = { mode, start: stagePoint(event), rect: rectOf(layer), id: layer.id };
+    gesture.current = { mode, start: stagePoint(event), rect: rectOf(layer), id: layer.id, group: `gesture-${++gestureCount}` };
   };
 
   const move = (event: PointerEvent) => {
@@ -59,7 +61,7 @@ export default function StageOverlay({ layers, frame, width, selectedId, onSelec
     if (g.mode === 'move') next = moveRect(g.rect, dx, dy);
     else if (g.mode === 'rotate') next = rotateRect(g.rect, g.start, point, event.shiftKey);
     else next = resizeRect(g.rect, g.mode, dx, dy, event.shiftKey);
-    onChange(g.id, next);
+    onChange(g.id, next, g.group);
   };
 
   const end = () => { gesture.current = null; };
@@ -88,7 +90,7 @@ export default function StageOverlay({ layers, frame, width, selectedId, onSelec
         {editing === layer.id && layer.type === 'text' && <textarea className="studio-inline-edit" autoFocus value={layer.text}
           style={{ fontSize: layer.fontSize * scale, fontWeight: layer.fontWeight, fontFamily: FONT_FAMILIES[layer.fontFamily], textAlign: layer.align, color: layer.color }}
           onPointerDown={(event) => event.stopPropagation()} onKeyDown={(event) => { event.stopPropagation(); if (event.key === 'Escape') setEditing(null); }}
-          onChange={(event) => onChange(layer.id, { text: event.target.value })} onBlur={() => setEditing(null)} />}
+          onChange={(event) => onChange(layer.id, { text: event.target.value }, `inline-${layer.id}`)} onBlur={() => setEditing(null)} />}
         {selected && !layer.locked && editing !== layer.id && <>
           {HANDLES.map((handle) => <span key={handle} className={`studio-handle ${handleClass[handle]}`} aria-label={`缩放手柄 ${handle}`}
             onPointerDown={(event) => begin(event, layer, handle)} onPointerMove={move} onPointerUp={end} onPointerCancel={end} />)}

@@ -97,23 +97,3 @@ export function SceneInspector({ project, scene, canDelete, onScene, onProject, 
     {canDelete && <button onClick={onDelete}>删除当前场景</button>}
   </div>;
 }
-
-export function LayerList({ layers, selectedId, onSelect, onToggle, onMove, onDelete }: {
-  layers: Layer[]; selectedId: string | null; onSelect: (id: string) => void;
-  onToggle: (id: string, key: 'visible' | 'locked') => void; onMove: (id: string, delta: -1 | 1) => void; onDelete: (id: string) => void;
-}) {
-  if (!layers.length) return <p className="studio-empty">当前场景还没有图层，从上方添加。</p>;
-  return <ul className="studio-layers" aria-label="图层列表">
-    {[...layers].reverse().map((layer) => {
-      const index = layers.indexOf(layer);
-      return <li key={layer.id} className={layer.id === selectedId ? 'selected' : ''}>
-        <button className="studio-layer-name" onClick={() => onSelect(layer.id)}>{layer.name}</button>
-        <button aria-label={`${layer.visible ? '隐藏' : '显示'} ${layer.name}`} title={layer.visible ? '隐藏' : '显示'} onClick={() => onToggle(layer.id, 'visible')}>{layer.visible ? '👁' : '—'}</button>
-        <button aria-label={`${layer.locked ? '解锁' : '锁定'} ${layer.name}`} title={layer.locked ? '解锁' : '锁定'} onClick={() => onToggle(layer.id, 'locked')}>{layer.locked ? '🔒' : '🔓'}</button>
-        <button aria-label={`上移 ${layer.name}`} disabled={index === layers.length - 1} onClick={() => onMove(layer.id, 1)}>↑</button>
-        <button aria-label={`下移 ${layer.name}`} disabled={index === 0} onClick={() => onMove(layer.id, -1)}>↓</button>
-        <button aria-label={`删除 ${layer.name}`} onClick={() => onDelete(layer.id)}>×</button>
-      </li>;
-    })}
-  </ul>;
-}

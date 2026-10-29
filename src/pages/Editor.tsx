@@ -7,7 +7,9 @@ import PropsForm from '../components/editor/PropsForm';
 import Timeline from '../components/editor/Timeline';
 import ExportDialog from '../components/editor/ExportDialog';
 import { useProject } from '../components/editor/useProject';
+import StudioWorkbench from '../components/studio/StudioWorkbench';
 import '../styles/editor.css';
+import '../styles/studio.css';
 
 function ProjectEditor({ id }: { id: string | undefined }) {
   const { project, loading, saving, message, error, update, save } = useProject(id);
@@ -22,7 +24,9 @@ function ProjectEditor({ id }: { id: string | undefined }) {
   return <div className="editor">
     <header className="editor-header"><div><Link to="/">← 返回首页</Link><h1>{project.name}</h1><span>{template.meta.name}</span></div><div className="editor-toolbar"><button disabled={saving} onClick={() => void save()}>{saving ? '保存中…' : '保存项目'}</button><button className="editor-primary" onClick={() => setExporting(true)}>导出 MP4 ↗</button></div></header>
     <p className="editor-status" role="status">{message}</p>{error && <p className="editor-error" role="alert">{error}</p>}
-    <div className="editor-workspace"><PreviewPane project={project} template={template} playerRef={playerRef} onFrame={onFrame} /><PropsForm project={project} template={template} onChange={update} /></div>
+    {project.templateId === 'studio-canvas'
+      ? <StudioWorkbench project={project} template={template} playerRef={playerRef} frame={Math.min(frame, project.durationInFrames - 1)} onFrame={onFrame} seek={seek} onChange={update} />
+      : <div className="editor-workspace"><PreviewPane project={project} template={template} playerRef={playerRef} onFrame={onFrame} /><PropsForm project={project} template={template} onChange={update} /></div>}
     {project.templateId === 'blank-timeline' && <Timeline project={project} frame={Math.min(frame, project.durationInFrames - 1)} onSeek={seek} onChange={update} />}
     {exporting && <ExportDialog project={project} onClose={() => setExporting(false)} />}
   </div>;

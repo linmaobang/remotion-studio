@@ -31,7 +31,8 @@ export default function Create() {
   const [error, setError] = useState('');
   const busyRef = useRef(false);
   const alive = useRef(true);
-  useEffect(() => () => { alive.current = false; }, []);
+  // StrictMode 开发模式会先卸载再重挂载，挂载时必须把标记复位。
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
   const busy = stage === 'optimizing' || stage === 'refining' || stage === 'creating';
 

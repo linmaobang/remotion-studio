@@ -1,0 +1,21 @@
+
+> remotion-studio@0.1.0 build
+> tsc --noEmit -p . && vite build
+
+vite v8.3.5 building client environment for production...
+transforming...
+✓ 91 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                     0.40 kB │ gzip:   0.30 kB
+dist/assets/index-B_WYUfRO.css     16.86 kB │ gzip:   4.13 kB
+dist/assets/index-CJgTpXKi.js   1,637.49 kB │ gzip: 467.13 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+[33m[INEFFECTIVE_DYNAMIC_IMPORT] [0mnode_modules/@remotion/player/dist/esm/index.mjs is dynamically imported by src/components/home/TemplateCard.tsx but also statically imported by src/components/editor/PreviewPane.tsx, dynamic import will not move module into another chunk.
+
+✓ built in 225ms

@@ -32,5 +32,10 @@
 
 ## 模板约定
 - 每个模板 `src/templates/<id>/index.tsx` default 导出 `TemplateDef`，并在 `src/templates/index.ts` 显式 import 追加。
-- Remotion 入口 `src/remotion/index.ts`；Composition id = 模板 id；`calculateMetadata` 从 inputProps 读取 `width/height/fps/durationInFrames`（≤1920x1080）。预览(@remotion/player)与渲染共用同一组件。
+- Remotion 入口 `src/remotion/index.ts`；Composition id = 模板 id；`calculateMetadata` 从 inputProps 读取 `width/height/fps/durationInFrames`（横屏 ≤1920x1080，竖屏即高>宽时 ≤1080x1920）。预览(@remotion/player)与渲染共用同一组件。
 - 类型定义见 `src/shared/types.ts`。
+
+## 创作画布（studio-canvas）
+- `templateId` 为 `studio-canvas`，`props = { scenes: Scene[] }`（见 `src/templates/studio-canvas/model.ts`），项目 `durationInFrames` 必须等于各场景 `durationFrames` 之和（编辑器用 `withStudioDuration` 维护）。
+- 起手预设见 `src/templates/studio-canvas/presets.ts`；创建项目即 `POST /api/projects`，body 带预设的 `props/width/height/durationInFrames`。
+- 渲染端不应用 schema 默认值，合成组件内部自行解析；素材 `src` 以 `/` 开头时渲染前由服务端改写为 `http://127.0.0.1:<PORT>` 前缀。

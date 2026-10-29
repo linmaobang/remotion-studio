@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import { MAX_WIDTH, MAX_HEIGHT, type ProjectData, type RenderJob } from '../src/shared/types';
+import { maxSizeFor, type ProjectData, type RenderJob } from '../src/shared/types';
 import { projectIdSchema, projectSchema, readProject } from './projects';
 
 const jobs = new Map<string, RenderJob>();
@@ -29,14 +29,17 @@ const rewriteSources = (value: unknown): unknown => {
   return value;
 };
 
-export const getRenderInputProps = (project: ProjectData): Record<string, unknown> => ({
+export const getRenderInputProps = (project: ProjectData): Record<string, unknown> => {
+  const max = maxSizeFor(project.width, project.height);
+  return {
   ...rewriteSources(project.props) as Record<string, unknown>,
   ...(project.timeline ? { timeline: rewriteSources(project.timeline) } : {}),
-  width: Math.max(2, Math.floor(Math.min(project.width, MAX_WIDTH) / 2) * 2),
-  height: Math.max(2, Math.floor(Math.min(project.height, MAX_HEIGHT) / 2) * 2),
+  width: Math.max(2, Math.floor(Math.min(project.width, max.width) / 2) * 2),
+  height: Math.max(2, Math.floor(Math.min(project.height, max.height) / 2) * 2),
   fps: Math.max(1, Math.min(project.fps, 60)),
   durationInFrames: project.durationInFrames,
-});
+  };
+};
 
 const runRender = async (jobId: string, project: ProjectData) => {
   const job = jobs.get(jobId)!;

@@ -30,6 +30,10 @@ test('渲染参数限制尺寸和 fps，递归改写素材地址且不修改项�
   assert.equal(project.props.src, '/files/uploads/image.png');
   const minimum = getRenderInputProps({ ...project, width: 1, height: 1, fps: 0.1 });
   assert.deepEqual([minimum.width, minimum.height, minimum.fps], [2, 2, 1]);
+  const portrait = getRenderInputProps({ ...project, width: 720, height: 1280 });
+  assert.deepEqual([portrait.width, portrait.height], [720, 1280]);
+  const huge = getRenderInputProps({ ...project, width: 2000, height: 4000 });
+  assert.deepEqual([huge.width, huge.height], [1080, 1920]);
 });
 
 test('上传名称清除路径和特殊字符', () => {

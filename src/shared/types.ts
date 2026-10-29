@@ -72,3 +72,6 @@ export interface RenderJob {
 
 export const MAX_WIDTH = 1920;
 export const MAX_HEIGHT = 1080;
+
+/** 横屏上限 1920x1080；竖屏（高>宽）对调为 1080x1920，避免 720x1280 这类竖屏被压成 1080 高。 */
+export const maxSizeFor = (width: number, height: number) => (height > width ? { width: MAX_HEIGHT, height: MAX_WIDTH } : { width: MAX_WIDTH, height: MAX_HEIGHT });

@@ -58,12 +58,16 @@ export async function loadProjects(): Promise<{ projects: ProjectData[]; local: 
   }
 }
 
-export async function createProject(template: TemplateDef): Promise<{ project: ProjectData; local: boolean }> {
+export async function createProject(
+  template: TemplateDef,
+  overrides: Partial<Pick<ProjectData, 'name' | 'props' | 'width' | 'height' | 'durationInFrames'>> = {},
+): Promise<{ project: ProjectData; local: boolean }> {
   const draft = {
     name: template.meta.name,
     templateId: template.meta.id,
     props: structuredClone(template.defaultProps),
     ...template.defaultConfig,
+    ...structuredClone(overrides),
   };
   let project: ProjectData;
   let local = false;

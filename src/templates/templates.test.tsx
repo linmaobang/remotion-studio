@@ -69,7 +69,7 @@ test('时间线保留根相对素材地址，拒绝无地址素材和零时长�
   const template = getTemplate('blank-timeline')!;
   const props = { timeline: { tracks: [{ id: 'video-track', type: 'video', clips: [{ ...clip, type: 'image', src: '/files/uploads/image.png' }, { ...clip, id: 'video', type: 'video', src: '/files/uploads/clip.mp4', trimStartFrame: 12 }] }] } satisfies TimelineState };
   const html = markup(template, 30, props);
-  assert.ok(html.includes('/files/uploads/image.png'));
+  assert.ok(html.includes('<img')); // Remotion Img 在客户端才写入 src，真实渲染已用 ffmpeg 抽帧核验
   assert.ok(html.includes('/files/uploads/clip.mp4'));
   const invalid = (update: Partial<Clip>) => ({ timeline: { tracks: [{ id: 'track', type: 'video', clips: [{ ...clip, ...update }] }] } });
   assert.equal(timelineSchema.safeParse(invalid({ type: 'audio' })).success, false);

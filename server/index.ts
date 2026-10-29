@@ -1,6 +1,8 @@
 import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
+import multer from 'multer';
+import { ZodError } from 'zod';
 import { projectsRouter } from './projects';
 import { uploadRouter } from './upload';
 import { renderRouter } from './render';
@@ -20,6 +22,16 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/projects', projectsRouter);
 app.use('/api/upload', uploadRouter);
 app.use('/api/render', renderRouter);
+
+app.use(((error, _req, res, _next) => {
+  const code = (error as NodeJS.ErrnoException).code;
+  const status = error instanceof ZodError ? 400
+    : error instanceof multer.MulterError ? (error.code === 'LIMIT_FILE_SIZE' ? 413 : 400)
+    : code === 'ENOENT' ? 404
+    : (error as { status?: number }).status || 500;
+  if (status === 500) console.error(error);
+  res.status(status).json({ error: status === 500 ? '服务内部错误' : error.message });
+}) as express.ErrorRequestHandler);
 
 app.listen(PORT, HOST, (error?: Error) => {
   if (error) {

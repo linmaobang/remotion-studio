@@ -25,6 +25,6 @@ export default function PreviewPane({ project, template, playerRef, onFrame }: {
   }, [project.durationInFrames, playerRef]);
   return <section className="editor-preview" aria-label="实时预览">
     <div className="editor-section-title"><h2>实时预览</h2><span>{project.width} × {project.height} · {project.fps} fps</span></div>
-    <div className="editor-stage"><Player ref={playerRef} component={template.component} inputProps={props} compositionWidth={project.width} compositionHeight={project.height} fps={project.fps} durationInFrames={project.durationInFrames} controls style={{ width: '100%', maxHeight: '60vh', aspectRatio: `${project.width}/${project.height}` }} errorFallback={({ error }) => <p role="alert">预览失败：{error.message}</p>} /></div>
+    <div className="editor-stage"><Player ref={playerRef} component={template.component} inputProps={props} compositionWidth={project.width} compositionHeight={project.height} fps={project.fps} durationInFrames={project.durationInFrames} controls style={{ width: '100%', maxHeight: '60vh', aspectRatio: `${project.width}/${project.height}` }} errorFallback={({ error }: { error: Error }) => <p role="alert">预览失败：{error.message}</p>} /></div>
   </section>;
 }

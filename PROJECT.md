@@ -37,7 +37,7 @@
 - 仅本地自用，不做线上部署；首页沿用「分类 + 卡片 + 标签 + Prompt」信息架构。Remotion 商用需按其许可购买 Company License。
 
 ## 当前状态
-本期范围已全部完成并通过验收：项目脚手架与共享契约、内置模板（含 `studio-canvas` 创作画布）、首页模板库与创作入口、后端项目存取/上传/渲染、创作页、创作画布工作台、集成联调与 README 端到端验证；文字需求 → 视频闭环，包括 VideoPlan schema 与 API 契约、`ai-video` 方案驱动模板、`/api/plan/optimize|refine`、`/create` 需求输入页与两种自动化模式、方案可视化编辑器（预览、时间轴拖拽排序与调时长、属性面板、AI 修改、撤销重做、防抖自动保存、导出）。新增本地 CLI AI 适配层（`claude-cli`/`codex-cli`）并完成返工：修复进程回收、并发队列、临时目录及脚本退出码，build 与 74 个测试通过；真实 CLI 调用仍受环境限制（Claude 连接失败、Codex 初始化权限被拒），未验证真实 `usedLLM:true`。无 key 端到端跑通并导出 10 秒 1080p h264+aac MP4；ai-video 用 samplePlan 真实渲染 1920×1080、30fps、900 帧 h264 MP4，5 个场景抽帧正常。API 约定见 `docs/api.md`，CLI 验证见 `docs/local-agent.md`。
+本期范围已全部完成并通过验收：项目脚手架与共享契约、内置模板（含 `studio-canvas` 创作画布）、首页模板库与创作入口、后端项目存取/上传/渲染、创作页、创作画布工作台、集成联调与 README 端到端验证；文字需求 → 视频闭环，包括 VideoPlan schema 与 API 契约、`ai-video` 方案驱动模板、`/api/plan/optimize|refine`、`/create` 需求输入页与两种自动化模式、方案可视化编辑器（预览、时间轴拖拽排序与调时长、属性面板、AI 修改、撤销重做、防抖自动保存、导出）。新增本地 CLI AI 适配层（`claude-cli`/`codex-cli`）并完成返工：修复进程回收、并发队列、临时目录及脚本退出码，build 与 74 个测试通过；真实 CLI 调用仍受环境限制（Claude 连接失败、Codex 初始化权限被拒），未验证真实 `usedLLM:true`。无 key 端到端跑通并导出 10 秒 1080p h264+aac MP4；ai-video 用 samplePlan 真实渲染 1920×1080、30fps、900 帧 h264 MP4，5 个场景抽帧正常。API 约定见 `docs/api.md`，CLI 验证见 `docs/local-agent.md`。项目记忆 PROJECT.md 已同步更新。
 
 ## 遗留问题
 - 编辑器预览起始帧修复（`StableStart`）只做了代码核对，未在真实浏览器目视确认 0:00 与转场起点画面，也未重新渲染导出核验，实现在 `src/templates/shared.tsx`、`src/lib/editor.ts`。
@@ -60,6 +60,7 @@
 负责人：claude；复核人：codex
 
 ## 更新记录
+- 2026-10-30：更新项目记忆 PROJECT.md（linmaobang）
 - 2026-10-30：本地 CLI AI 适配层返工验收通过，修复进程回收、并发队列、临时目录及脚本退出码，74 项测试与构建通过；真实 CLI 有效响应与 `usedLLM:true` 未验证（codex）
 - 2026-10-30：修复编辑器预览在场景起点（0:00/转场起点）黑屏，改用 `StableStart` 显示首个稳定帧，typecheck 与 57 个测试通过（claude）
 - 2026-10-30：完成端到端集成验证、README 与 docs/api.md 更新；无 key 下导出 10 秒 1080p h264+aac MP4，修复 `/create` 在 StrictMode 下卡死（claude）
@@ -74,4 +75,3 @@
 - 2026-10-29：完成 studio-canvas 创作模型与合成组件，模板增至 8 个，12 个测试通过（claude）
 - 2026-10-29：完成集成联调、README 与端到端验证，首页/编辑器/7 个模板页控制台无报错（claude）
 - 2026-10-29：创作页返工，补 `PreviewPane.tsx` 类型标注使 tsc 退出码 0，原 TS7031 阻断问题解决（claude）
-- 2026-10-29：后端项目存取/上传/渲染返工通过，3217 端口 curl 全流程与 MP4 导出验证成功；服务默认端口由 3001 改为 3217 并支持 `PORT` 覆盖（claude、codex）

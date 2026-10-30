@@ -1,8 +1,8 @@
-import { Router } from 'express';
+import { Router, type Response } from 'express';
 import type { AssetRef, OptimizeRequest, Orientation, PlanResponse, RefineRequest } from '../src/plan/api';
 import { parsePlan, planDuration, type Scene, type VideoPlan } from '../src/plan/schema';
 import type { LlmFn, LlmMessage } from './llm';
-import { resolveLlm } from './localAgent';
+import { detectProviders, PROVIDER_CHOICES, PROVIDER_LABELS, resolveProvider, type ProviderChoice, type ResolvedLlm } from './localAgent';
 
 const FPS = 30;
 const DEFAULT_SECONDS = 30;
@@ -13,12 +13,12 @@ const SCHEMA_DOC = `VideoPlan JSON 结构：
   "version": 1,
   "title": "视频标题",
   "brief": "一句话概述（可选）",
-  "style": { "theme": { "primary": "#hex 主色", "secondary": "#hex 辅色", "background": "#hex 深色背景", "text": "#hex 文字色（与背景对比度足够）" }, "fontFamily": "rounded | sans | serif 之一的字体风格名", "mood": "风格关键词（可选）" },
+  "style": { "theme": { "primary": "#hex 主色", "secondary": "#hex 辅色", "background": "#hex 深色背景", "text": "#hex 文字色（与背景对比度足够）" }, "fontFamily": "system | rounded | serif | songti | kaiti | mono 之一，按气质选择", "mood": "风格关键词（可选）" },
   "format": { "width": 1920, "height": 1080, "fps": 30 },
   "scenes": [ 场景... ],
   "audio": { "bgm": { "src": "url", "volume": 0.3, "loop": true }, "voiceover": { "src": "url", "volume": 1, "startFrame": 0 } }
 }
-每个场景都有公共字段：id（唯一短字符串）、kind、durationFrames（整数帧，最少 15）、transition { "type": "fade|slide-left|slide-up|none", "frames": 15 }，以及可选 backgroundColor、backgroundSrc（背景图 url）、notes。
+每个场景都有公共字段：id（唯一短字符串）、kind、durationFrames（整数帧，最少 15）、transition { "type": "fade|slide-left|slide-up|none", "frames": 15 }，以及可选 backgroundColor（本场景背景色）、backgroundSrc（背景图 url）、accentColor（本场景强调色 #hex，覆盖主色）、emoji（一个贴合内容的装饰 emoji）、enter（内容入场动画："rise" 上浮 | "zoom" 缩放 | "fade" 淡入 | "none"）、notes。
 场景类型与专有字段：
 - title：title, subtitle?
 - image-text：title, body（≤600 字，可含 \\n）, imageSrc?（图片 url）, imagePosition("left"|"right")
@@ -29,16 +29,17 @@ format：横屏最大 1920x1080，竖屏最大 1080x1920；fps 固定 30。`;
 
 const RULES = `规则：
 1. 只输出一个 JSON 对象，不要 markdown 代码块，不要任何解释文字。
-2. 所有场景 durationFrames 之和 = 目标总帧数（秒数 × 30），允许 ±10% 偏差。
-3. 开头用 title 场景，结尾用 cta 场景，中间穿插 image-text / list / stat，场景数通常 4-8 个，每个场景 3-8 秒。
-4. 配色统一协调：深色背景 + 一个醒目主色，文字对比度高；文案简洁有力，使用用户的语言。
-5. 素材只能通过清单里的 url 原样引用，不得编造 url。`;
+2. 你是导演：先根据需求自行决定整体风格、配色（背景/主色/辅色/文字，文字对比度要高）、字体、节奏与转场，再设计分镜。不同需求必须有明显不同的风格，不要套用固定模板。
+3. 所有场景 durationFrames 之和 = 目标总帧数（秒数 × 30），允许 ±10% 偏差；节奏按内容安排，信息密度高的场景给更长时间，短促有力的场景 2-3 秒即可。
+4. 场景数量与类型按内容决定，不强制固定结构（不必都以 title 开头或 cta 结尾）：叙述用 image-text，并列要点用 list，只有需求里真实出现的数据才用 stat，需要引导行动才用 cta。可以用 accentColor 让不同场景有各自重点色，用 emoji 增加视觉符号，用 enter 和 transition 营造节奏变化。
+5. 文案必须针对用户需求具体撰写：用具体的名称、卖点、场景、细节，使用用户的语言。禁止空话套话（如“关于我们”“核心亮点”“用心呈现每一个细节”“立即了解”这类放到任何视频都成立的话），禁止编造用户没有提供的数字、价格、地址、日期。没有真实数据就不要用 stat 场景。
+6. 素材只能通过清单里的 url 原样引用，不得编造 url。`;
 
 const assetLines = (assets: AssetRef[]) => assets.length
   ? assets.map((a) => `- [${a.kind}] ${a.name}: ${a.url}`).join('\n')
   : '（无）';
 
-const optimizeSystem = (req: { seconds: number; orientation: Orientation; assets: AssetRef[] }) => `你是专业的视频策划，把用户的一句话需求设计成可直接渲染的视频方案（VideoPlan）。
+const optimizeSystem = (req: { seconds: number; orientation: Orientation; assets: AssetRef[] }) => `你是专业的视频策划，把用户的需求设计成可直接渲染、贴合需求的视频初稿（VideoPlan）；用户之后会在编辑器里微调，所以初稿要有真实内容，而不是占位。
 
 ${SCHEMA_DOC}
 
@@ -191,45 +192,74 @@ export function normalizeOptimize(body: Partial<OptimizeRequest> | null | undefi
   };
 }
 
+/** 带 HTTP 状态码的业务错误：503 = 没有可用引擎，502 = 引擎调用失败或输出始终不合法。 */
+export class PlanError extends Error {
+  constructor(public status: 502 | 503, message: string) { super(message); }
+}
+
+const PROVIDER_FAIL_HINT = '请检查 Claude Code / Codex 是否已登录（claude login / codex login）、网络是否可用，或调大 LOCAL_AGENT_TIMEOUT_MS 后重试。';
+
+/** AI 生成方案；失败直接抛 PlanError，不再静默降级到本地模板。 */
 export async function optimizePlan(req: NormalizedOptimize, llm: LlmFn | null): Promise<PlanResponse> {
+  if (!llm) throw new PlanError(503, '没有可用的 AI 引擎：请设置 ANTHROPIC_API_KEY，或安装并登录 Claude Code / Codex。');
+  const attempt = await askLlm(llm, optimizeSystem(req), `用户需求：${req.prompt}`);
+  if (!attempt.ok) throw new PlanError(502, `${attempt.reason}。${PROVIDER_FAIL_HINT}`);
   const warnings: string[] = [];
-  if (!llm) {
-    warnings.push('未配置 ANTHROPIC_API_KEY，已使用本地规则生成方案');
-  } else {
-    const attempt = await askLlm(llm, optimizeSystem(req), `用户需求：${req.prompt}`);
-    if (attempt.ok) {
-      const plan = attempt.plan;
-      // 模型漏掉的音频素材由我们补上，避免用户上传的素材被忽略。
-      const fallbackAudio = audioFrom(req.assets);
-      plan.audio = { ...fallbackAudio, ...plan.audio };
-      const target = req.seconds * FPS;
-      if (Math.abs(planDuration(plan) - target) > target * 0.3) warnings.push(`总时长 ${Math.round(planDuration(plan) / FPS)} 秒与目标 ${req.seconds} 秒相差较大`);
-      return { plan, usedLLM: true, warnings: [...attempt.warnings, ...warnings] };
-    }
-    warnings.push(`${attempt.reason}，已降级为本地规则生成`);
-  }
+  const plan = attempt.plan;
+  // 模型漏掉的音频素材由我们补上，避免用户上传的素材被忽略。
+  plan.audio = { ...audioFrom(req.assets), ...plan.audio };
+  const target = req.seconds * FPS;
+  if (Math.abs(planDuration(plan) - target) > target * 0.3) warnings.push(`总时长 ${Math.round(planDuration(plan) / FPS)} 秒与目标 ${req.seconds} 秒相差较大`);
+  return { plan, usedLLM: true, warnings: [...attempt.warnings, ...warnings] };
+}
+
+/** 本地固定模板（非 AI）。仅在 PLAN_ALLOW_HEURISTIC=1 或请求明确 provider:'heuristic' 时使用。 */
+export function heuristicOptimize(req: NormalizedOptimize, extraWarnings: string[] = []): PlanResponse {
   const parsed = parsePlan(heuristicPlan(req));
   if (!parsed.ok) throw new Error(parsed.errors.join('；')); // 本地生成器输出恒合法，仅作类型收窄
-  return { plan: parsed.plan, usedLLM: false, warnings: [...warnings, ...parsed.warnings] };
+  return { plan: parsed.plan, usedLLM: false, provider: 'heuristic', providerLabel: PROVIDER_LABELS.heuristic, warnings: ['本地模板，未使用 AI', ...extraWarnings, ...parsed.warnings] };
 }
 
 export async function refinePlan(plan: VideoPlan, instruction: string, llm: LlmFn | null): Promise<PlanResponse> {
-  if (!llm) return { plan, usedLLM: false, warnings: ['未配置 ANTHROPIC_API_KEY，无法按指令修改，已原样返回'] };
+  if (!llm) throw new PlanError(503, '没有可用的 AI 引擎，无法按指令修改：请设置 ANTHROPIC_API_KEY，或安装并登录 Claude Code / Codex。');
   const attempt = await askLlm(llm, refineSystem, `当前方案：\n${JSON.stringify(plan)}\n\n修改指令：${instruction}`);
-  if (attempt.ok) return { plan: attempt.plan, usedLLM: true, warnings: attempt.warnings };
-  return { plan, usedLLM: false, warnings: [`${attempt.reason}，已原样返回`] };
+  if (!attempt.ok) throw new PlanError(502, `修改失败：${attempt.reason}。${PROVIDER_FAIL_HINT}`);
+  return { plan: attempt.plan, usedLLM: true, warnings: attempt.warnings };
 }
 
-export function createPlanRouter(getLlm: () => LlmFn | null = () => resolveLlm()) {
+const asChoice = (value: unknown): ProviderChoice | undefined | null =>
+  value === undefined || value === null || value === '' ? undefined : (PROVIDER_CHOICES as readonly unknown[]).includes(value) ? value as ProviderChoice : null;
+
+export function createPlanRouter(env: NodeJS.ProcessEnv = process.env, resolve: (choice?: ProviderChoice) => ResolvedLlm = (choice) => resolveProvider(env, choice)) {
   const router = Router();
+  const fail = (res: Response, error: unknown) => {
+    if (error instanceof PlanError) { res.status(error.status).json({ error: error.message }); return; }
+    console.error(error);
+    res.status(500).json({ error: '服务内部错误' });
+  };
+  router.get('/providers', (_req, res) => {
+    const providers = detectProviders(env);
+    res.json({ providers, defaultProvider: providers.find((p) => p.available)?.id ?? null, allowHeuristic: env.PLAN_ALLOW_HEURISTIC === '1' });
+  });
   router.post('/optimize', async (req, res) => {
-    const request = normalizeOptimize(req.body);
+    const body = req.body as Partial<OptimizeRequest> | undefined;
+    const request = normalizeOptimize(body);
     if (!request) { res.status(400).json({ error: 'prompt 不能为空' }); return; }
+    const choice = asChoice(body?.provider);
+    if (choice === null) { res.status(400).json({ error: 'provider 只能是 auto / api / claude / codex / heuristic' }); return; }
     try {
-      res.json(await optimizePlan(request, getLlm()));
+      if (choice === 'heuristic') { res.json(heuristicOptimize(request)); return; }
+      const resolved = resolve(choice);
+      try {
+        if (!resolved.ok) throw new PlanError(503, resolved.error);
+        res.json({ ...(await optimizePlan(request, resolved.llm)), provider: resolved.id, providerLabel: resolved.label });
+      } catch (error) {
+        // 只有显式开启 PLAN_ALLOW_HEURISTIC=1 才允许退回本地模板，且响应里明确标注。
+        if (error instanceof PlanError && env.PLAN_ALLOW_HEURISTIC === '1') { res.json(heuristicOptimize(request, [`AI 生成失败（${error.message}），已按 PLAN_ALLOW_HEURISTIC=1 改用本地模板`])); return; }
+        throw error;
+      }
     } catch (error) {
-      console.error(error);
-      res.status(500).json({ error: '服务内部错误' });
+      fail(res, error);
     }
   });
   router.post('/refine', async (req, res) => {
@@ -239,11 +269,14 @@ export function createPlanRouter(getLlm: () => LlmFn | null = () => resolveLlm()
       res.status(400).json({ error: '需要有效的 plan 与非空的 instruction' });
       return;
     }
+    const choice = asChoice(body.provider);
+    if (choice === null || choice === 'heuristic') { res.status(400).json({ error: 'provider 只能是 auto / api / claude / codex' }); return; }
     try {
-      res.json(await refinePlan(parsed.plan, body.instruction.trim().slice(0, 2000), getLlm()));
+      const resolved = resolve(choice);
+      if (!resolved.ok) throw new PlanError(503, resolved.error);
+      res.json({ ...(await refinePlan(parsed.plan, body.instruction.trim().slice(0, 2000), resolved.llm)), provider: resolved.id, providerLabel: resolved.label });
     } catch (error) {
-      console.error(error);
-      res.status(500).json({ error: '服务内部错误' });
+      fail(res, error);
     }
   });
   return router;

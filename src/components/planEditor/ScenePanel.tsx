@@ -60,6 +60,11 @@ export default function ScenePanel({ scene, fps, assets, onPatch, onUploaded, on
       <ColorField label="背景色" value={scene.backgroundColor ?? ''} onChange={(backgroundColor) => onPatch({ backgroundColor }, `${scene.id}-bg`)} onClear={() => onPatch({ backgroundColor: undefined })} />
       <AssetSelect label="背景图" kind="image" value={scene.backgroundSrc} assets={assets} onUploaded={onUploaded} onChange={(backgroundSrc) => onPatch({ backgroundSrc })} />
     </section>
+    <section className="pe-group"><h4>风格</h4>
+      <SelectField label="入场动画" value={scene.enter ?? 'rise'} options={[['rise', '上浮（默认）'], ['zoom', '缩放'], ['fade', '淡入'], ['none', '无']]} onChange={(enter) => onPatch({ enter })} />
+      {text('emoji', '装饰 emoji', scene.emoji)}
+      <ColorField label="强调色" value={scene.accentColor ?? ''} onChange={(accentColor) => onPatch({ accentColor }, `${scene.id}-accent`)} onClear={() => onPatch({ accentColor: undefined })} />
+    </section>
     <section className="pe-group"><h4>备注</h4>{text('notes', '备注（不会出现在视频里）', scene.notes, true)}</section>
   </div>;
 }

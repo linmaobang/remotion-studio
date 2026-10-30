@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { AssetRef, Orientation, PlanResponse } from '../plan/api';
+import type { AssetRef, Orientation, PlanResponse, ProviderChoice, ProvidersResponse } from '../plan/api';
 import type { VideoPlan } from '../plan/schema';
-import { createPlanProject, optimizePlan, readMode, refinePlan, saveMode, type CreateMode } from '../lib/planApi';
+import { createPlanProject, fetchProviders, optimizePlan, readMode, refinePlan, saveMode, type CreateMode } from '../lib/planApi';
 import ModeSwitch from '../components/create/ModeSwitch';
 import AssetUploader from '../components/create/AssetUploader';
 import PlanEditor from '../components/create/PlanEditor';
@@ -14,8 +14,16 @@ const examples = [
   '公司年度总结视频：关键数据（营收、用户、团队规模）与明年展望，专业简洁',
 ];
 const durations = [15, 30, 45, 60];
+const providerOptions: [ProviderChoice, string][] = [['auto', '自动'], ['claude', 'Claude Code'], ['codex', 'Codex'], ['api', 'API Key']];
 
 type Stage = 'input' | 'optimizing' | 'review' | 'refining' | 'creating';
+
+function engineSuffix(id: ProviderChoice, info: ProvidersResponse | null): string {
+  if (!info) return '';
+  if (id === 'auto') return info.defaultProvider ? `（将用 ${info.providers.find((p) => p.id === info.defaultProvider)?.label}）` : '（无可用引擎）';
+  const found = info.providers.find((p) => p.id === id);
+  return found ? (found.available ? '（可用）' : '（不可用）') : '';
+}
 
 export default function Create() {
   const navigate = useNavigate();
@@ -27,11 +35,14 @@ export default function Create() {
   const modeRef = useRef(mode);
   const [stage, setStage] = useState<Stage>('input');
   const [plan, setPlan] = useState<VideoPlan | null>(null);
-  const [notes, setNotes] = useState<{ usedLLM: boolean; warnings: string[] }>({ usedLLM: true, warnings: [] });
+  const [notes, setNotes] = useState<{ usedLLM: boolean; label?: string; warnings: string[] }>({ usedLLM: true, warnings: [] });
   const [error, setError] = useState('');
+  const [provider, setProvider] = useState<ProviderChoice>('auto');
+  const [providers, setProviders] = useState<ProvidersResponse | null>(null);
   const busyRef = useRef(false);
   const alive = useRef(true);
   // StrictMode 开发模式会先卸载再重挂载，挂载时必须把标记复位。
+  useEffect(() => { fetchProviders().then((value) => { if (alive.current) setProviders(value); }).catch(() => { /* 检测失败不影响生成，生成时会报具体错误 */ }); }, []);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
   const busy = stage === 'optimizing' || stage === 'refining' || stage === 'creating';
@@ -59,11 +70,11 @@ export default function Create() {
 
   function receive(result: PlanResponse) {
     setPlan(result.plan);
-    setNotes({ usedLLM: result.usedLLM, warnings: result.warnings });
+    setNotes({ usedLLM: result.usedLLM, label: result.providerLabel, warnings: result.warnings });
   }
 
   const submit = () => run('optimizing', 'input', async () => {
-    const result = await optimizePlan({ prompt: prompt.trim(), assets, durationSec, orientation });
+    const result = await optimizePlan({ prompt: prompt.trim(), assets, durationSec, orientation, provider });
     if (!alive.current) return;
     receive(result);
     // 等待期间用户可能已切到全自动：直接继续。
@@ -72,7 +83,7 @@ export default function Create() {
   });
 
   const refine = (instruction: string) => plan && run('refining', 'review', async () => {
-    const result = await refinePlan({ plan, instruction });
+    const result = await refinePlan({ plan, instruction, ...(provider === 'heuristic' ? {} : { provider }) });
     if (!alive.current) return;
     receive(result);
     if (modeRef.current === 'auto') await finish(result.plan);
@@ -89,7 +100,7 @@ export default function Create() {
     if (next === 'auto' && stage === 'review' && plan) void confirm();
   }
 
-  const progress = ['优化需求', '生成方案', '创建项目'];
+  const progress = ['优化需求', 'AI 设计分镜', '创建项目'];
   const progressIndex = stage === 'optimizing' ? 1 : stage === 'refining' ? 1 : stage === 'creating' ? 2 : -1;
   const reviewing = stage === 'review' || stage === 'refining' || (stage === 'creating' && mode === 'step');
 
@@ -99,10 +110,13 @@ export default function Create() {
       <p className="create-lead">描述你想要的视频，AI 会优化成分镜方案，再生成可编辑的项目。</p>
       <ModeSwitch mode={mode} onChange={changeMode} />
       {error && <p className="create-error" role="alert">{error} {stage === 'input' && prompt.trim() && <button type="button" onClick={submit}>重试</button>}</p>}
+      {stage === 'optimizing' && <p className="create-warn" role="status">AI 正在设计分镜（可能需要 1-2 分钟），请不要关闭页面…</p>}
       {busy && <ol className="create-progress" aria-live="polite">{progress.map((p, i) => <li key={p} data-state={i < progressIndex ? 'done' : i === progressIndex ? 'active' : 'todo'}>{p}</li>)}</ol>}
       {reviewing && plan ? (
         <>
-          {!notes.usedLLM && <p className="create-warn" role="status">未使用大模型（可能未配置 API Key），已用本地兜底方案生成，质量有限。</p>}
+          {notes.usedLLM
+            ? <p className="create-note" role="status">由 {notes.label ?? 'AI'} 生成</p>
+            : <p className="create-error" role="alert"><strong>本地模板，未使用 AI。</strong>内容是固定占位文案，请自行修改或改用 AI 引擎重新生成。</p>}
           {notes.warnings.map((w) => <p className="create-warn" role="status" key={w}>{w}</p>)}
           <PlanEditor plan={plan} disabled={busy} onChange={setPlan} onRefine={refine} />
           <div className="create-actions">
@@ -117,6 +131,7 @@ export default function Create() {
           </label>
           <div className="create-examples"><span>试试：</span>{examples.map((ex, i) => <button type="button" key={ex} disabled={busy} onClick={() => setPrompt(ex)}>示例 {i + 1}</button>)}</div>
           <div className="create-options">
+            <label>AI 引擎<select value={provider} disabled={busy} onChange={(e) => setProvider(e.target.value as ProviderChoice)}>{(providers?.allowHeuristic ? [...providerOptions, ['heuristic', '本地模板（非 AI）'] as [ProviderChoice, string]] : providerOptions).map(([id, name]) => <option key={id} value={id}>{name}{engineSuffix(id, providers)}</option>)}</select></label>
             <label>时长<select value={durationSec} disabled={busy} onChange={(e) => setDurationSec(Number(e.target.value))}>{durations.map((d) => <option key={d} value={d}>{d} 秒</option>)}</select></label>
             <div className="create-segment" role="group" aria-label="画幅">
               <button type="button" aria-pressed={orientation === 'landscape'} disabled={busy} onClick={() => setOrientation('landscape')}>横屏 16:9</button>

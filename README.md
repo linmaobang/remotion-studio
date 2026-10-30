@@ -11,7 +11,7 @@
  │      │ 预览：@remotion/player，与渲染共用同一组件
  │      ▼ /api、/files 经 Vite 代理
 Express 后端 (127.0.0.1:3217, server/)
- ├─ /api/plan/optimize|refine   server/plan.ts → server/llm.ts → Anthropic API（可选；无 key 走本地规则兜底）
+ ├─ /api/plan/optimize|refine   server/plan.ts → server/llm.ts → Anthropic API（AI 引擎：API Key / 本机 Claude Code / Codex，自动探测；不可用时明确报错，不再套固定模板）
  ├─ /api/projects               项目存取 → data/projects/*.json
  ├─ /api/upload                 素材上传 → data/uploads/
  └─ /api/render                 @remotion/bundler + renderer（h264/aac）→ data/renders/*.mp4
@@ -38,9 +38,10 @@ npm run dev
 ## 环境变量
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | 无 | `api` 模式或未指定 provider 时使用；无 key 且未选 CLI 时 optimize 用本地规则生成（`usedLLM:false`），refine 原样返回。只从环境变量读取，不落盘。 |
-| `LLM_PROVIDER` | 自动 | `api` / `claude-cli` / `codex-cli`；未设置时有 key 用 API，否则本地规则。 |
+| `ANTHROPIC_API_KEY` | 无 | 自动探测的第一优先引擎（API Key → 本机 claude → 本机 codex）。只从环境变量读取，不落盘。 |
+| `LLM_PROVIDER` | 自动 | `api` / `claude-cli` / `codex-cli`；未设置时按 API Key → claude → codex 自动探测（在 PATH 里找可执行文件，不读凭据）。页面「AI 引擎」选择和请求体 `provider` 优先于它。 |
 | `LLM_MODEL` | `claude-sonnet-5-5` | 使用的模型 ID，每次请求时读取。 |
+| `PLAN_ALLOW_HEURISTIC` | 未设置 | 设为 `1` 时，AI 失败后允许退回本地固定模板（响应明确标注，页面红字提示）；也让页面出现「本地模板」选项。 |
 | `PORT` | `3217` | 后端端口；Vite 代理同步使用（`PORT=3218 npm run dev`）。 |
 
 示例：`ANTHROPIC_API_KEY=sk-... npm run dev`。
@@ -54,7 +55,7 @@ env -u ANTHROPIC_API_KEY LLM_PROVIDER=claude-cli npm run dev
 env -u ANTHROPIC_API_KEY npm run ask -- --provider both "问题"
 ```
 
-可选 `LOCAL_AGENT_MODEL`、`LOCAL_AGENT_TIMEOUT_MS`（默认 180000 毫秒）、`LOCAL_AGENT_CONCURRENCY`（默认 1，最大 2）。`both` 依次调用两者，任一失败退出码为 1；plan 调用失败则返回 `usedLLM:false` 和原因。当前受限执行环境的真实调用仍失败：Claude 连接被拒绝/超时，Codex 初始化被拒绝；尚未验证两者的真实 `usedLLM:true`。完整命令与验证记录见 [docs/local-agent.md](docs/local-agent.md)。
+可选 `LOCAL_AGENT_MODEL`、`LOCAL_AGENT_TIMEOUT_MS`（默认 180000 毫秒）、`LOCAL_AGENT_CONCURRENCY`（默认 1，最大 2）。`both` 依次调用两者，任一失败退出码为 1。AI 不可用或失败时 `/api/plan/*` 返回 502/503 和原因，页面显示错误并可重试，**不会**再悄悄生成固定模板。当前受限执行环境的真实调用仍失败：Claude 连接被拒绝/超时，Codex 初始化被拒绝；尚未验证两者的真实 `usedLLM:true`。完整命令与验证记录见 [docs/local-agent.md](docs/local-agent.md)。
 
 ## 文字生成视频（/create）
 1. 输入需求，可点「示例」填充；选择时长（秒）与横/竖屏；可上传图片、背景音乐、配音。
@@ -115,7 +116,7 @@ env -u ANTHROPIC_API_KEY npm run ask -- --provider both "问题"
 - **左栏**：场景列表（点击选中并跳转预览）、素材库（上传，图片「设为图片/设为背景」，音频「设为 BGM/设为配音」）。
 - **中间**：Remotion Player 实时预览，播放/暂停/进度/全屏；空格键播放暂停（焦点在输入框或按钮上不触发）。预览暂停并停在场景起点（0:00 或转场起点）时，显示该场景入场/转场结束后的首个稳定帧；仅影响预览显示，导出不受影响。
 - **底部时间轴**：拖动场景块排序，拖右边缘改时长，缩放滑块；「添加场景/复制/删除」。
-- **右栏属性面板**：「全局」（标题、配色、画幅、音频）与「场景」（按 kind 的文案/列表/数据、时长、转场、背景、图片）；顶部「用 AI 修改」输入自然语言指令（调用 refine，无 key 时原样返回并提示）。
+- **右栏属性面板**：「全局」（标题、配色、画幅、音频）与「场景」（按 kind 的文案/列表/数据、时长、转场、背景、图片）；顶部「用 AI 修改」输入自然语言指令（调用 refine，AI 不可用或失败时显示错误，不会假装成功）。
 - **撤销/重做**：所有修改走同一入口，撤销栈存整项目快照，上限 100，仅当前会话有效；改动防抖约 1.5 秒自动保存，也可点「保存」。
 
 ## 导出说明
@@ -129,8 +130,9 @@ env -u ANTHROPIC_API_KEY npm run ask -- --provider both "问题"
 - 通过 `/files/uploads/...`、`/files/renders/...` 访问。API 约定见 [docs/api.md](docs/api.md)。
 
 ## 已知限制
-- 未用真实 ANTHROPIC_API_KEY 验证过 Claude 调用；LLM 非法输出的重试与降级只有单测覆盖（最多 3 次，之后降级为本地规则/原样返回）。
-- 无 key 时本地规则生成的方案较简单，且 `durationSec` 以需求页的时长选择为准。
+- 未用真实 ANTHROPIC_API_KEY 验证过 Claude 调用；LLM 非法输出的重试只有单测覆盖（最多 3 次，仍不合法则返回 502）。
+- 本地固定模板（`heuristicPlan`，非 AI）默认关闭，仅在 `PLAN_ALLOW_HEURISTIC=1` 或请求 `provider:"heuristic"` 时使用，页面会醒目标注「本地模板，未使用 AI」。
+- AI 生成一次可能需要 1-2 分钟（本机 CLI 启动 + 推理）；`durationSec` 以需求页的时长选择为准。
 - 竖屏、配音（voiceover）的真实渲染未实测；BGM 已实测。
 - 方案编辑器预览在场景起点可能显示转场起始状态（见上）；未做人工视觉走查，未用真实鼠标测试时间轴拖拽。
 - 上传的 mp3 在 `/api/upload` 返回的 `mime` 为 `application/octet-stream`（由浏览器/multer 判定，不影响使用）。

@@ -53,3 +53,5 @@
 .create-refine .create-field { width: 100%; }
 .topbar-link { margin-left: 16px; }
 .home-ai-entry { display: inline-block; margin: 0 0 16px; padding: 10px 20px; border-radius: 8px; background: #28634b; color: #fff; font-weight: 600; }
+
+.create-note { margin: 10px 0; font-size: .9rem; opacity: .75; }

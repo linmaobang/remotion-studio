@@ -1,5 +1,5 @@
 // 视频方案相关接口的 fetch 封装：后端未就绪或返回异常时抛出带中文提示的 PlanApiError，不让页面崩溃。
-import type { AssetKind, AssetRef, OptimizeRequest, PlanResponse, RefineRequest } from '../plan/api';
+import type { AssetKind, AssetRef, OptimizeRequest, PlanResponse, ProvidersResponse, RefineRequest } from '../plan/api';
 import { parsePlan, planDuration, type VideoPlan } from '../plan/schema';
 import type { ProjectData } from '../shared/types';
 import { readLocalProjects, saveLocalProjects } from '../components/home/library';
@@ -38,10 +38,19 @@ function toPlanResponse(body: unknown, what: string): PlanResponse {
   const parsed = parsePlan(raw.plan);
   if (!parsed.ok) throw new PlanApiError(`${what}失败：返回的方案格式不正确（${parsed.errors.slice(0, 2).join('；')}）。`);
   const warnings = [...(Array.isArray(raw.warnings) ? raw.warnings.filter((w): w is string => typeof w === 'string') : []), ...parsed.warnings];
-  return { plan: parsed.plan, usedLLM: raw.usedLLM !== false, warnings };
+  return {
+    plan: parsed.plan, usedLLM: raw.usedLLM === true, warnings,
+    ...(typeof raw.provider === 'string' ? { provider: raw.provider } : {}),
+    ...(typeof raw.providerLabel === 'string' ? { providerLabel: raw.providerLabel } : {}),
+  };
 }
 
 const post = (payload: unknown): RequestInit => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+
+export async function fetchProviders(): Promise<ProvidersResponse> {
+  const body = await request<Partial<ProvidersResponse>>('/api/plan/providers', { method: 'GET' }, '检测 AI 引擎');
+  return { providers: Array.isArray(body?.providers) ? body.providers : [], defaultProvider: body?.defaultProvider ?? null, allowHeuristic: body?.allowHeuristic === true };
+}
 
 export async function optimizePlan(req: OptimizeRequest): Promise<PlanResponse> {
   return toPlanResponse(await request('/api/plan/optimize', post(req), '生成方案'), '生成方案');

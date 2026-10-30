@@ -30,6 +30,7 @@ const oneOf = <T extends string>(values: readonly T[], fallback: T) => z.unknown
 const COLOR = /^(#[0-9a-f]{3,8}|[a-z]+|(rgb|hsl)a?\([^)]*\))$/i;
 const color = (fallback: string) => z.unknown().transform((value) => typeof value === 'string' && COLOR.test(value.trim()) ? value.trim() : fallback);
 const optColor = () => z.unknown().transform((value) => typeof value === 'string' && COLOR.test(value.trim()) ? value.trim() : undefined);
+const optOneOf = <T extends string>(values: readonly T[]) => z.unknown().transform((value): T | undefined => (values as readonly unknown[]).includes(value) ? value as T : undefined);
 const list = <T extends z.ZodTypeAny>(item: T, max: number) => z.unknown().transform((value) => {
   if (!Array.isArray(value)) return [] as z.output<T>[];
   const out: z.output<T>[] = [];
@@ -43,6 +44,8 @@ const list = <T extends z.ZodTypeAny>(item: T, max: number) => z.unknown().trans
 
 export const TRANSITION_TYPES = ['fade', 'slide-left', 'slide-up', 'none'] as const;
 export const SCENE_KINDS = ['title', 'image-text', 'list', 'stat', 'cta'] as const;
+export const ENTER_TYPES = ['rise', 'zoom', 'fade', 'none'] as const;
+export type EnterType = (typeof ENTER_TYPES)[number];
 export type TransitionType = (typeof TRANSITION_TYPES)[number];
 export type SceneKind = (typeof SCENE_KINDS)[number];
 
@@ -58,6 +61,12 @@ const common = {
   transition: transitionSchema,
   backgroundColor: optColor(),
   backgroundSrc: optText(500),
+  /** 本场景强调色，覆盖主题主色。 */
+  accentColor: optColor(),
+  /** 场景角落的装饰 emoji。 */
+  emoji: optText(8),
+  /** 内容入场动画，缺省为 rise（上浮）。 */
+  enter: optOneOf(ENTER_TYPES),
   notes: optText(1000),
 };
 

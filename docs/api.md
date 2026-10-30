@@ -33,11 +33,16 @@
 ## 视频方案接口 /api/plan/*
 类型定义见 `src/plan/api.ts`，方案结构见 `src/plan/schema.ts` 与 README「VideoPlan JSON schema」。两个接口共用响应 `PlanResponse`：
 ```ts
-{ plan: VideoPlan, usedLLM: boolean, warnings: string[] }
+{ plan: VideoPlan, usedLLM: boolean, provider?: "api"|"claude"|"codex"|"heuristic", providerLabel?: string, warnings: string[] }
 ```
-`plan` 一定已通过 `parsePlan` 修复（数值钳制、默认值补全）；`usedLLM:false` 表示走了本地兜底；`warnings` 应展示给用户。
+`plan` 一定已通过 `parsePlan` 修复（数值钳制、默认值补全）；`usedLLM:false` 只会出现在 `provider:"heuristic"`（本地固定模板，非 AI，`warnings[0]` 为「本地模板，未使用 AI」）；`providerLabel` 是页面显示的「由 xxx 生成」；`warnings` 应展示给用户。
 
-环境变量：`ANTHROPIC_API_KEY`（未设置则不调用 LLM）、`LLM_MODEL`（默认 `claude-sonnet-5-5`），均在每次请求时读取。LLM 输出不是合法 JSON/方案时，带错误信息最多重试到共 3 次调用，仍失败则降级；LLM 抛错同样降级，不会返回 5xx。
+环境变量：`ANTHROPIC_API_KEY`（未设置则不调用 LLM）、`LLM_MODEL`（默认 `claude-sonnet-5-5`），均在每次请求时读取。LLM 输出不是合法 JSON/方案时，带错误信息最多重试到共 3 次调用，仍失败则返回 **502**；引擎调用抛错（未登录、超时等）同样 502，没有可用/指定的引擎返回 **503**；均为 `{ "error": "原因 + 处理提示" }`，**不会静默降级**为固定模板。
+
+引擎选择：请求体 `provider`（`auto|api|claude|codex|heuristic`，其余值 400）> 环境变量 `LLM_PROVIDER` > 自动探测 API Key → 本机 claude → 本机 codex。指定的引擎不可用时直接 503，不换别的引擎。`heuristic` 仅 optimize 支持；环境变量 `PLAN_ALLOW_HEURISTIC=1` 时，AI 失败才退回本地模板并标注。
+
+### GET /api/plan/providers
+`{ providers: [{id:"api"|"claude"|"codex", label, available, reason?}], defaultProvider: id|null, allowHeuristic: boolean }`。可用性只检查 API Key 是否设置、`claude`/`codex` 是否在 PATH 里，**不代表已登录**；页面据此展示引擎状态。
 
 ### POST /api/plan/optimize
 请求 `OptimizeRequest`：
@@ -46,12 +51,13 @@
   "assets": [{ "url": "/files/uploads/x.png", "name": "x.png", "kind": "image" }] }
 ```
 - `prompt` 必填（去空白后非空）；`durationSec`、`orientation`（`landscape|portrait`）可选；`assets[].kind` 为 `image|audio|voiceover`，url 取自 `/api/upload`。
-- 200：`PlanResponse`。无 key 时 `usedLLM:false`，`warnings` 含「未配置 ANTHROPIC_API_KEY…」，素材已按规则放入方案（图片 → imageSrc/背景，audio → `audio.bgm`）。
+- 200：`PlanResponse`（`usedLLM:true`，含 `provider`/`providerLabel`）；用户上传的 audio/voiceover 素材若模型漏填会被补上。
+- 502 / 503：见上。
 - 400：`{ "error": "prompt 不能为空" }`。其余内部错误 500 `{ "error": "服务内部错误" }`。
 
 ### POST /api/plan/refine
 请求 `RefineRequest`：`{ "plan": VideoPlan, "instruction": "把第二个场景改成列表" }`。
-- 200：`PlanResponse`；无 key 或修改失败时 `usedLLM:false` 并原样返回（经修复的）plan，`warnings` 说明原因。
+- 200：`PlanResponse`；`provider` 可选（不含 heuristic）。修改失败 502、无可用引擎 503，不再原样返回。
 - 400：`plan` 无法解析（如 `scenes` 为空）或 `instruction` 为空，`{ "error": "需要有效的 plan 与非空的 instruction" }`。
 
 ### 用方案生成视频（curl 流程）

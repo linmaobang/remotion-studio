@@ -144,3 +144,17 @@ test('AI 视频：服务端把 plan 内以 / 开头的素材地址改写为本�
   assert.equal(input.audio.bgm!.src, `${origin}/files/uploads/a.mp3`);
   assert.equal(input.audio.voiceover!.src, `${origin}/files/uploads/v.mp3`);
 });
+
+test('AI 视频：场景的 emoji / accentColor / enter 会渲染，且不影响旧方案', () => {
+  const template = getTemplate('ai-video')!;
+  const parsed = parsePlan({ scenes: [{ kind: 'title', title: '手冲咖啡', emoji: '☕', accentColor: '#ff5500', enter: 'zoom', durationFrames: 120, transition: { type: 'none' } }] });
+  assert.ok(parsed.ok);
+  if (!parsed.ok) return;
+  const html = markup(template, 60, { plan: parsed.plan });
+  assert.ok(html.includes('☕'));
+  assert.ok(html.toLowerCase().includes('#ff5500') || html.includes('rgb(255, 85, 0)'));
+  for (const enter of ['rise', 'fade', 'none'] as const) {
+    const variant = { ...parsed.plan, scenes: [{ ...parsed.plan.scenes[0], enter }] } as typeof parsed.plan;
+    assert.ok(textOf(markup(template, 5, { plan: variant })).includes('手冲'), enter);
+  }
+});

@@ -7,7 +7,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { samplePlan } from '../src/plan/schema';
 import { normalizeOptimize, optimizePlan } from './plan';
-import { createLocalAgentLlm, LocalAgentError, resolveLlm, runLocalAgent } from './localAgent';
+import { createLocalAgentLlm, detectProviders, LocalAgentError, resolveLlm, resolveProvider, runLocalAgent } from './localAgent';
 
 let dir: string;
 test.before(async () => { dir = await mkdtemp(join(tmpdir(), 'fake-cli-')); });
@@ -113,12 +113,27 @@ test('createLocalAgentLlm：多轮拼成带标记的 prompt，system 单独传',
   assert.match(multi, /\[用户\]\nQ1\n\n\[助手\]\nA1\n\n\[用户\]\nQ2/);
 });
 
-test('resolveLlm：按 LLM_PROVIDER / API key 选择', () => {
-  assert.equal(resolveLlm({}), null);
-  assert.equal(typeof resolveLlm({ ANTHROPIC_API_KEY: 'k' }), 'function');
-  assert.equal(typeof resolveLlm({ LLM_PROVIDER: 'claude-cli' }), 'function');
-  assert.equal(typeof resolveLlm({ LLM_PROVIDER: 'codex-cli' }), 'function');
-  assert.equal(resolveLlm({ LLM_PROVIDER: 'api' }), null);
+test('detectProviders / resolveProvider：自动按 api → claude → codex，显式指定不会悄悄换引擎', async () => {
+  const bin = await fakeCli('claude', 'process.exit(0);');
+  const pathEnv = { PATH: dir };
+  const st = (env: NodeJS.ProcessEnv) => detectProviders(env).map((p) => [p.id, p.available]);
+  assert.deepEqual(st({ PATH: '/nonexistent' }), [['api', false], ['claude', false], ['codex', false]]);
+  assert.deepEqual(st(pathEnv), [['api', false], ['claude', true], ['codex', false]]);
+  assert.deepEqual(st({ ...pathEnv, LOCAL_AGENT_CODEX_BIN: bin }), [['api', false], ['claude', true], ['codex', true]]);
+  const auto = resolveProvider(pathEnv);
+  assert.ok(auto.ok && auto.id === 'claude');
+  const withKey = resolveProvider({ ...pathEnv, ANTHROPIC_API_KEY: 'k' });
+  assert.ok(withKey.ok && withKey.id === 'api');
+  const codex = resolveProvider(pathEnv, 'codex');
+  assert.ok(!codex.ok && /Codex 不可用/.test(codex.error));
+  const none = resolveProvider({ PATH: '/nonexistent' });
+  assert.ok(!none.ok && /没有可用的 AI 引擎/.test(none.error));
+  const byEnv = resolveProvider({ ...pathEnv, ANTHROPIC_API_KEY: 'k', LLM_PROVIDER: 'claude-cli' });
+  assert.ok(byEnv.ok && byEnv.id === 'claude');
+  const override = resolveProvider({ ...pathEnv, LLM_PROVIDER: 'codex-cli' }, 'claude');
+  assert.ok(override.ok && override.id === 'claude'); // 请求体优先于环境变量
+  assert.equal(resolveLlm({ PATH: '/nonexistent' }), null);
+  assert.equal(typeof resolveLlm(pathEnv), 'function');
 });
 
 test('默认工作目录每次独立且在成功和失败后清理', async () => {

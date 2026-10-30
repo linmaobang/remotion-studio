@@ -10,6 +10,9 @@ export interface AssetRef {
   kind: AssetKind;
 }
 
+/** AI 引擎选择：auto 按 API Key → Claude Code → Codex 探测；heuristic 是本地固定模板（非 AI）。 */
+export type ProviderChoice = 'auto' | 'api' | 'claude' | 'codex' | 'heuristic';
+
 export type Orientation = 'landscape' | 'portrait';
 
 /** POST /api/plan/optimize：把一句需求优化成完整方案。 */
@@ -18,18 +21,23 @@ export interface OptimizeRequest {
   assets?: AssetRef[];
   durationSec?: number;
   orientation?: Orientation;
+  provider?: ProviderChoice;
 }
 
 /** POST /api/plan/refine：按自然语言指令修改已有方案。 */
 export interface RefineRequest {
   plan: VideoPlan;
   instruction: string;
+  provider?: Exclude<ProviderChoice, 'heuristic'>;
 }
 
-/** 两个接口共用的成功响应；usedLLM 为 false 表示走了本地兜底生成。 */
+/** 两个接口共用的成功响应；usedLLM 为 false 只会出现在显式选择/允许的本地模板（provider 为 heuristic）。 */
 export interface PlanResponse {
   plan: VideoPlan;
   usedLLM: boolean;
+  /** 实际使用的引擎 id（api / claude / codex / heuristic）。 */
+  provider?: string;
+  providerLabel?: string;
   warnings: string[];
 }
 
@@ -40,3 +48,7 @@ export type RefineResponse = PlanResponse;
 export interface PlanErrorResponse {
   error: string;
 }
+
+/** GET /api/plan/providers */
+export interface ProviderInfo { id: 'api' | 'claude' | 'codex'; label: string; available: boolean; reason?: string }
+export interface ProvidersResponse { providers: ProviderInfo[]; defaultProvider: ProviderInfo['id'] | null; allowHeuristic: boolean }

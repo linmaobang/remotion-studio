@@ -13,10 +13,12 @@
 
 | 值 | 行为 |
 |---|---|
-| `api` | 用 `ANTHROPIC_API_KEY` 直连 Anthropic API（无 key 则降级本地规则） |
+| `api` | 用 `ANTHROPIC_API_KEY` 直连 Anthropic API（无 key 则 503 报错） |
 | `claude-cli` | 调本机 `claude` |
 | `codex-cli` | 调本机 `codex` |
-| 未设置 | 有 `ANTHROPIC_API_KEY` → api；否则无 LLM，plan 接口走本地规则（原行为） |
+| 未设置 | 自动探测：`ANTHROPIC_API_KEY` → PATH 里的 `claude` → PATH 里的 `codex`；都没有则 503，不再走本地规则 |
+
+页面「AI 引擎」选择与请求体 `provider` 优先于 `LLM_PROVIDER`；指定引擎不可用时报错，不会悄悄换别的。
 
 其他变量：`LOCAL_AGENT_MODEL`（透传给 CLI 的 `--model`）、`LOCAL_AGENT_TIMEOUT_MS`（默认 180000）、`LOCAL_AGENT_CONCURRENCY`（默认 1，最大 2）、`LOCAL_AGENT_CLAUDE_BIN` / `LOCAL_AGENT_CODEX_BIN`（指定可执行文件，测试用）。
 
@@ -42,7 +44,7 @@ env -u ANTHROPIC_API_KEY npx tsx scripts/ask-local-agent.ts --provider both "只
 - 两者都可能在回复里带 ```json 围栏或前后说明，`plan.ts` 的 `extractJson` 已能容忍（实测见下）。
 
 ## 与 plan 接口的对接
-`createPlanRouter` 默认 `getLlm = () => resolveLlm()`（每次请求读取环境变量）。`LlmFn` 返回 CLI 的文本，plan.ts 照常 `extractJson → parsePlan`，不合法最多修复 2 次；CLI 调用抛错则降级本地规则，响应 `usedLLM:false`，错误原因进 `warnings`。
+`createPlanRouter(env, resolve)` 默认 `resolve = (choice) => resolveProvider(env, choice)`（每次请求读取环境变量）。`LlmFn` 返回 CLI 的文本，plan.ts 照常 `extractJson → parsePlan`，不合法最多修复 2 次；CLI 调用抛错或始终不合法则 `/api/plan/*` 返回 502 和原因（不再降级为本地模板），没有可用引擎返回 503。
 
 ## 异常
 `LocalAgentError.code`：
@@ -118,3 +120,6 @@ curl --fail-with-body --max-time 40 -sS -X POST \
 三类异常均已验证：NOT_INSTALLED（假 CLI 缺失）、EXIT_NONZERO（假 CLI 退出 3，以及真实 Codex 权限错误）、TIMEOUT（假 CLI 忽略 SIGTERM 后被 SIGKILL，以及真实 Claude 15 秒超时）。
 
 尚未完成：`--provider both` 两个真实成功响应，以及无 API key 下两个 provider 各一次真实 `usedLLM:true`。需在允许 CLI 正常初始化、访问模型服务的本机终端重跑，不能用假 CLI 或降级结果替代；没有生成/保存 API key，没有修改或抓取凭据。
+
+### 补充：取消静默降级后的实测（PORT=3218，沙箱内）
+上表是取消降级之前的记录；现在 AI 失败返回错误而不是本地方案。同样在沙箱内（外网被拒、codex 不能读 `~/.codex/config.toml`）重测：`GET /api/plan/providers` 显示 claude、codex 在 PATH 中可用、api 不可用；`provider:"claude"` 的 optimize 等满 180 秒后 **502**（`claude 调用超过 180 秒未返回…`）；`provider:"codex"` 立即 **502**（config.toml 权限错误）；`provider:"api"` **503**（未设置 ANTHROPIC_API_KEY）。均没有返回本地模板。真实的 `usedLLM:true` 仍需在普通终端验证。

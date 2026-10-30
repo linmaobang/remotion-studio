@@ -18,12 +18,23 @@ export const getSceneTransitionStyle = (scene: Scene, local: number, width: numb
   return { transform: `translateY(${(1 - p) * height}px)` };
 };
 
-const SceneFrameBody = ({ scene, theme, font }: { scene: Scene; theme: Theme; font: string }) => {
+/** 内容入场：转场结束后用 20 帧完成 zoom / fade；rise 由各场景自带的逐项上浮实现。 */
+export const getEnterStyle = (scene: Scene, local: number) => {
+  const enter = scene.enter ?? 'rise';
+  if (enter === 'rise' || enter === 'none') return {};
+  const p = interpolate(local - scene.transition.frames, [0, 20], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) });
+  return enter === 'fade' ? { opacity: p } : { opacity: p, transform: `scale(${0.88 + p * 0.12})` };
+};
+
+const SceneFrameBody = ({ scene, theme: baseTheme, font }: { scene: Scene; theme: Theme; font: string }) => {
   const local = useCurrentFrame();
   const { width, height } = useVideoConfig();
+  const theme = scene.accentColor ? { ...baseTheme, primary: scene.accentColor } : baseTheme;
+  const size = Math.min(width, height);
   return <AbsoluteFill style={getSceneTransitionStyle(scene, local, width, height)}>
     <Backdrop scene={scene} theme={theme} />
-    <SceneView scene={scene} theme={theme} font={font} />
+    <AbsoluteFill style={getEnterStyle(scene, local)}><SceneView scene={scene} theme={theme} font={font} /></AbsoluteFill>
+    {scene.emoji && <div style={{ position: 'absolute', top: size * 0.06, right: size * 0.08, fontSize: size * 0.12, lineHeight: 1 }}>{scene.emoji}</div>}
   </AbsoluteFill>;
 };
 

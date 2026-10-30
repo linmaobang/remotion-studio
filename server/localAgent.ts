@@ -1,9 +1,10 @@
 // 本机 CLI 适配层：用已登录的 Claude Code / Codex CLI 代替 API Key。
 // 只启动子进程（spawn、参数数组、shell:false，prompt 走 stdin），不读取、不保存任何凭据。
 import { spawn } from 'node:child_process';
+import { accessSync, constants, statSync } from 'node:fs';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { createAnthropicLlm, type LlmFn } from './llm';
 
 export type LocalProvider = 'claude' | 'codex';
@@ -184,11 +185,56 @@ export function createLocalAgentLlm(provider: LocalProvider, env: NodeJS.Process
   };
 }
 
-/** LLM_PROVIDER=api|claude-cli|codex-cli；未设置时有 ANTHROPIC_API_KEY 用 api，否则 null（plan.ts 降级本地规则）。 */
+// —— AI 引擎选择 ——
+/** 请求/环境变量里可选的引擎：auto 按 api → claude → codex 探测；heuristic 是本地模板（非 AI）。 */
+export const PROVIDER_CHOICES = ['auto', 'api', 'claude', 'codex', 'heuristic'] as const;
+export type ProviderChoice = (typeof PROVIDER_CHOICES)[number];
+export type AiProviderId = 'api' | 'claude' | 'codex';
+
+export const PROVIDER_LABELS: Record<AiProviderId | 'heuristic', string> = { api: 'Anthropic API', claude: 'Claude Code', codex: 'Codex', heuristic: '本地模板' };
+
+export interface ProviderStatus { id: AiProviderId; label: string; available: boolean; reason?: string }
+
+/** 只在 PATH（或 LOCAL_AGENT_*_BIN）里找可执行文件，不读取任何凭据；是否已登录要真正调用时才知道。 */
+function findExecutable(name: string, env: NodeJS.ProcessEnv): boolean {
+  const candidates = name.includes('/') ? [name] : (env.PATH ?? '').split(delimiter).filter(Boolean).map((dir) => join(dir, name));
+  return candidates.some((file) => { try { accessSync(file, constants.X_OK); return statSync(file).isFile(); } catch { return false; } });
+}
+
+export function detectProviders(env: NodeJS.ProcessEnv = process.env): ProviderStatus[] {
+  const hasKey = Boolean(env.ANTHROPIC_API_KEY?.trim());
+  const cli = (id: 'claude' | 'codex'): ProviderStatus => {
+    const bin = env[id === 'claude' ? 'LOCAL_AGENT_CLAUDE_BIN' : 'LOCAL_AGENT_CODEX_BIN'] ?? id;
+    const available = findExecutable(bin, env);
+    return { id, label: PROVIDER_LABELS[id], available, ...(available ? {} : { reason: INSTALL_HINT[id] }) };
+  };
+  return [
+    { id: 'api', label: PROVIDER_LABELS.api, available: hasKey, ...(hasKey ? {} : { reason: '未设置 ANTHROPIC_API_KEY 环境变量' }) },
+    cli('claude'),
+    cli('codex'),
+  ];
+}
+
+export type ResolvedLlm = { ok: true; id: AiProviderId; label: string; llm: LlmFn } | { ok: false; error: string };
+
+/**
+ * 选择引擎：choice（请求体）> LLM_PROVIDER（api|claude-cli|codex-cli|claude|codex）> 自动探测 api → claude → codex。
+ * 指定的引擎不可用时返回明确错误，不会悄悄换别的引擎。heuristic 不属于 AI，由调用方单独处理。
+ */
+export function resolveProvider(env: NodeJS.ProcessEnv = process.env, choice?: ProviderChoice): ResolvedLlm {
+  const fromEnv = env.LLM_PROVIDER?.trim().toLowerCase().replace(/-cli$/, '');
+  const wanted = choice && choice !== 'auto' ? choice : (fromEnv === 'api' || fromEnv === 'claude' || fromEnv === 'codex' ? fromEnv : 'auto');
+  if (wanted === 'heuristic') return { ok: false, error: '本地模板不是 AI 引擎' };
+  const statuses = detectProviders(env);
+  const pick = wanted === 'auto' ? statuses.find((s) => s.available) : statuses.find((s) => s.id === wanted);
+  if (!pick) return { ok: false, error: '没有可用的 AI 引擎：请设置 ANTHROPIC_API_KEY，或安装并登录 Claude Code（claude login）/ Codex（codex login）后重试。' };
+  if (!pick.available) return { ok: false, error: `${pick.label} 不可用：${pick.reason ?? '未知原因'}` };
+  const llm = pick.id === 'api' ? createAnthropicLlm(env)! : createLocalAgentLlm(pick.id, env);
+  return { ok: true, id: pick.id, label: pick.label, llm };
+}
+
+/** 兼容旧用法：解析失败返回 null。 */
 export function resolveLlm(env: NodeJS.ProcessEnv = process.env): LlmFn | null {
-  const choice = env.LLM_PROVIDER?.trim().toLowerCase();
-  if (choice === 'claude-cli') return createLocalAgentLlm('claude', env);
-  if (choice === 'codex-cli') return createLocalAgentLlm('codex', env);
-  if (choice === 'api') return createAnthropicLlm(env);
-  return createAnthropicLlm(env);
+  const resolved = resolveProvider(env);
+  return resolved.ok ? resolved.llm : null;
 }

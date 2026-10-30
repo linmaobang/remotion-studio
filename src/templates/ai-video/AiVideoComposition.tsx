@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { AbsoluteFill, Audio, Easing, interpolate, Sequence, useCurrentFrame, useVideoConfig } from 'remotion';
 import { parsePlan, planDuration, type Scene, type VideoPlan } from '../../plan/schema';
+import { StableStart } from '../shared';
 import { Backdrop, fontStack, SceneView, type Theme } from './scenes';
 
 export type AiVideoProps = { plan: unknown };
@@ -17,13 +18,19 @@ export const getSceneTransitionStyle = (scene: Scene, local: number, width: numb
   return { transform: `translateY(${(1 - p) * height}px)` };
 };
 
-const SceneFrame = ({ scene, theme, font }: { scene: Scene; theme: Theme; font: string }) => {
+const SceneFrameBody = ({ scene, theme, font }: { scene: Scene; theme: Theme; font: string }) => {
   const local = useCurrentFrame();
   const { width, height } = useVideoConfig();
   return <AbsoluteFill style={getSceneTransitionStyle(scene, local, width, height)}>
     <Backdrop scene={scene} theme={theme} />
     <SceneView scene={scene} theme={theme} font={font} />
   </AbsoluteFill>;
+};
+
+const STABLE_AFTER = 45;
+const SceneFrame = ({ scene, theme, font }: { scene: Scene; theme: Theme; font: string }) => {
+  const offset = Math.min(scene.durationFrames - 1, scene.transition.frames + STABLE_AFTER);
+  return <StableStart offset={offset}><SceneFrameBody scene={scene} theme={theme} font={font} /></StableStart>;
 };
 
 const Placeholder = ({ errors }: { errors: string[] }) => (

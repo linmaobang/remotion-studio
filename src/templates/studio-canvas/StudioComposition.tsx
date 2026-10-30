@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import { AbsoluteFill, Audio, Img, interpolate, OffthreadVideo, Sequence, useCurrentFrame, useVideoConfig } from 'remotion';
+import { StableStart } from '../shared';
 import { FONT_FAMILIES, schema, type Background, type Layer, type Scene, type StudioProps } from './model';
 
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
@@ -107,6 +108,12 @@ const SceneView = ({ scene }: { scene: Scene }) => {
   </AbsoluteFill>;
 };
 
+/** 场景首个稳定帧：转场与各图层入场动画都结束后。 */
+const stableOffset = (scene: Scene) => Math.min(
+  Math.max(1, scene.durationFrames) - 1,
+  Math.max(scene.transitionIn?.frames ?? 0, ...scene.layers.filter((l) => l.visible).map((l) => l.startFrame + (l.type === 'audio' ? 0 : l.animationIn?.frames ?? 0))),
+);
+
 export const StudioComposition = (props: StudioProps) => {
   // 渲染端（renderMedia inputProps）不会自动应用 schema 默认值，这里统一补全。
   const parsed = schema.safeParse(props);
@@ -116,7 +123,7 @@ export const StudioComposition = (props: StudioProps) => {
     {scenes.map((scene) => {
       const from = offset;
       offset += Math.max(1, scene.durationFrames);
-      return <Sequence key={scene.id} name={`场景: ${scene.name}`} from={from} durationInFrames={Math.max(1, scene.durationFrames)}><SceneView scene={scene} /></Sequence>;
+      return <Sequence key={scene.id} name={`场景: ${scene.name}`} from={from} durationInFrames={Math.max(1, scene.durationFrames)}><StableStart offset={stableOffset(scene)}><SceneView scene={scene} /></StableStart></Sequence>;
     })}
   </AbsoluteFill>;
 };

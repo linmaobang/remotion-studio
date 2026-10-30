@@ -4,7 +4,8 @@ import { Player, type PlayerRef } from '@remotion/player';
 import type { ProjectData } from '../../shared/types';
 import type { TemplateDef } from '../../templates/registry';
 import { createScene, newId, schema, totalDuration, type Layer, type Scene } from '../../templates/studio-canvas/model';
-import { inputProps, withStudioDuration } from '../../lib/editor';
+import { inputProps, usePlayerPaused, withStudioDuration } from '../../lib/editor';
+import { HoldStartContext } from '../../templates/shared';
 import { canRedo, canUndo, createHistory, moveItem, push, redo, undo } from '../../lib/history';
 import { sceneIndexAt, sceneStartFrame } from '../../lib/studioGeometry';
 import AddToolbar from './AddToolbar';
@@ -32,6 +33,7 @@ export default function StudioWorkbench({ project, template, playerRef, frame, o
   onChange: Change;
 }) {
   const scenes = useMemo(() => readScenes(project), [project.props.scenes]);
+  const paused = usePlayerPaused(playerRef);
   const props = useMemo(() => inputProps(project), [project]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // 撤销栈保存整个项目快照；latest 保证同一帧内多次修改基于最新状态，而不是过期的 props。
@@ -152,7 +154,7 @@ export default function StudioWorkbench({ project, template, playerRef, frame, o
       </div>
       <p className="studio-hint">{project.width} × {project.height} · {project.fps} fps · 拖动/缩放/旋转，双击文字编辑，空格播放</p>
       <div className="studio-stage" style={{ aspectRatio: `${project.width}/${project.height}` }}>
-        <Player ref={playerRef} component={template.component} inputProps={props} compositionWidth={project.width} compositionHeight={project.height} fps={project.fps} durationInFrames={project.durationInFrames} controls clickToPlay={false} doubleClickToFullscreen={false} style={{ width: '100%', height: '100%' }} errorFallback={({ error }: { error: Error }) => <p role="alert">预览失败：{error.message}</p>} />
+        <HoldStartContext.Provider value={paused}><Player ref={playerRef} component={template.component} inputProps={props} compositionWidth={project.width} compositionHeight={project.height} fps={project.fps} durationInFrames={project.durationInFrames} controls clickToPlay={false} doubleClickToFullscreen={false} style={{ width: '100%', height: '100%' }} errorFallback={({ error }: { error: Error }) => <p role="alert">预览失败：{error.message}</p>} /></HoldStartContext.Provider>
         <StageOverlay layers={scene.layers} frame={frame - start} width={project.width} selectedId={layer ? layer.id : null} onSelect={setSelectedId} onChange={patchLayer} onDelete={removeLayer} />
       </div>
     </section>

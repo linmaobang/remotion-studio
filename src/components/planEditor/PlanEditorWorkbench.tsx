@@ -5,6 +5,8 @@ import { Player, type PlayerRef } from '@remotion/player';
 import type { AssetRef } from '../../plan/api';
 import { parsePlan, samplePlan, type Scene, type SceneKind, type VideoPlan } from '../../plan/schema';
 import type { ProjectData } from '../../shared/types';
+import { usePlayerPaused } from '../../lib/editor';
+import { HoldStartContext } from '../../templates/shared';
 import type { TemplateDef } from '../../templates/registry';
 import { canRedo, canUndo, createHistory, push, redo, undo } from '../../lib/history';
 import ExportDialog from '../editor/ExportDialog';
@@ -43,6 +45,7 @@ export default function PlanEditorWorkbench({ project, template, playerRef, fram
   const [selectedId, setSelectedId] = useState<string | null>(plan?.scenes[0]?.id ?? null);
   const [assets, setAssets] = useState<AssetRef[]>(() => (plan ? collectAssets(plan) : []));
   const [exporting, setExporting] = useState(false);
+  const paused = usePlayerPaused(playerRef, parsed.ok);
   const inputProps = useMemo(() => ({ plan }), [plan]);
   const selectedIndex = plan ? plan.scenes.findIndex((scene) => scene.id === selectedId) : -1;
   const scene = selectedIndex >= 0 ? plan!.scenes[selectedIndex] : undefined;
@@ -166,9 +169,9 @@ export default function PlanEditorWorkbench({ project, template, playerRef, fram
         <section className="pe-center" aria-label="实时预览">
           <div className="pe-stage">
             <div className="pe-player" style={{ width: `min(100%, ${52 * ratio}vh)`, aspectRatio: `${project.width}/${project.height}` }}>
-              <Player ref={playerRef} component={template.component} inputProps={inputProps} compositionWidth={project.width} compositionHeight={project.height} fps={project.fps}
+              <HoldStartContext.Provider value={paused}><Player ref={playerRef} component={template.component} inputProps={inputProps} compositionWidth={project.width} compositionHeight={project.height} fps={project.fps}
                 durationInFrames={project.durationInFrames} controls acknowledgeRemotionLicense style={{ width: '100%', height: '100%' }}
-                errorFallback={({ error: failure }: { error: Error }) => <p role="alert">预览失败：{failure.message}</p>} />
+                errorFallback={({ error: failure }: { error: Error }) => <p role="alert">预览失败：{failure.message}</p>} /></HoldStartContext.Provider>
             </div>
           </div>
           <p className="pe-hint">{project.width} × {project.height} · {project.fps} fps · 总时长 {(project.durationInFrames / project.fps).toFixed(1)}s · 空格播放/暂停</p>

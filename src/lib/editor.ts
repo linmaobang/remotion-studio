@@ -1,6 +1,24 @@
+import { useEffect, useState, type RefObject } from 'react';
+import type { PlayerRef } from '@remotion/player';
 import { z } from 'zod';
 import type { Clip, ProjectData, TimelineState } from '../shared/types';
 import { totalDuration } from '../templates/studio-canvas/model';
+
+/** 跟踪 Player 是否暂停（预览停在场景起点时用来显示稳定帧）。 */
+export function usePlayerPaused(playerRef: RefObject<PlayerRef | null>, ready = true) {
+  const [paused, setPaused] = useState(true);
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!player) return;
+    const on = () => setPaused(false);
+    const off = () => setPaused(true);
+    player.addEventListener('play', on);
+    player.addEventListener('pause', off);
+    player.addEventListener('ended', off);
+    return () => { player.removeEventListener('play', on); player.removeEventListener('pause', off); player.removeEventListener('ended', off); };
+  }, [playerRef, ready]);
+  return paused;
+}
 
 export function inputProps(project: ProjectData) {
   return {

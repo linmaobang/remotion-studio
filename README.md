@@ -38,14 +38,23 @@ npm run dev
 ## 环境变量
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | 无 | 配置后 /api/plan/* 调用 Claude 生成/修改方案；未配置时 optimize 用本地规则生成（`usedLLM:false`），refine 原样返回方案。只从环境变量读取，不落盘。 |
+| `ANTHROPIC_API_KEY` | 无 | `api` 模式或未指定 provider 时使用；无 key 且未选 CLI 时 optimize 用本地规则生成（`usedLLM:false`），refine 原样返回。只从环境变量读取，不落盘。 |
+| `LLM_PROVIDER` | 自动 | `api` / `claude-cli` / `codex-cli`；未设置时有 key 用 API，否则本地规则。 |
 | `LLM_MODEL` | `claude-sonnet-5-5` | 使用的模型 ID，每次请求时读取。 |
 | `PORT` | `3217` | 后端端口；Vite 代理同步使用（`PORT=3218 npm run dev`）。 |
 
 示例：`ANTHROPIC_API_KEY=sk-... npm run dev`。
 
 ### 用本机 Claude Code / Codex CLI 代替 API Key
-设置 `LLM_PROVIDER=claude-cli` 或 `codex-cli`（`api` 为 API Key 方式；未设置时按有无 key 决定），即可让 /api/plan/* 调用本机已登录的 CLI（额度计入各自订阅，个人本机自用，需遵守各自服务条款；不读取凭据；延迟较高、并发默认 1）。可选 `LOCAL_AGENT_MODEL`、`LOCAL_AGENT_TIMEOUT_MS`、`LOCAL_AGENT_CONCURRENCY`。命令行试用：`npm run ask -- --provider both "问题"`。详见 [docs/local-agent.md](docs/local-agent.md)。
+设置 `LLM_PROVIDER=claude-cli` 或 `codex-cli`，让 `/api/plan/*` 调用本机已登录的 CLI。Claude 使用 `claude auth login` 订阅登录，Codex 使用 `codex login` 的 ChatGPT 登录；使用订阅登录时额度计入各自订阅，须遵守各自服务条款，仅限个人本机自用。适配层不读取凭据文件。CLI 继承终端环境，使用 Claude 订阅时需取消 `ANTHROPIC_API_KEY`，避免 CLI 改走 API 计费（[官方说明](https://support.claude.com/en/articles/12304248-manage-api-key-environment-variables-in-claude-code)）。
+
+```bash
+env -u ANTHROPIC_API_KEY LLM_PROVIDER=claude-cli npm run dev
+# 或 LLM_PROVIDER=codex-cli
+env -u ANTHROPIC_API_KEY npm run ask -- --provider both "问题"
+```
+
+可选 `LOCAL_AGENT_MODEL`、`LOCAL_AGENT_TIMEOUT_MS`（默认 180000 毫秒）、`LOCAL_AGENT_CONCURRENCY`（默认 1，最大 2）。`both` 依次调用两者，任一失败退出码为 1；plan 调用失败则返回 `usedLLM:false` 和原因。当前受限执行环境的真实调用仍失败：Claude 连接被拒绝/超时，Codex 初始化被拒绝；尚未验证两者的真实 `usedLLM:true`。完整命令与验证记录见 [docs/local-agent.md](docs/local-agent.md)。
 
 ## 文字生成视频（/create）
 1. 输入需求，可点「示例」填充；选择时长（秒）与横/竖屏；可上传图片、背景音乐、配音。

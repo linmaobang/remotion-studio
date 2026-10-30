@@ -24,4 +24,4 @@ for (const provider of providers) {
     else console.error(error instanceof Error ? error.message : String(error));
   }
 }
-process.exit(failed === providers.length ? 1 : 0);
+process.exitCode = failed > 0 ? 1 : 0;

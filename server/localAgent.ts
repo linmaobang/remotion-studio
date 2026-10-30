@@ -1,7 +1,7 @@
 // 本机 CLI 适配层：用已登录的 Claude Code / Codex CLI 代替 API Key。
 // 只启动子进程（spawn、参数数组、shell:false，prompt 走 stdin），不读取、不保存任何凭据。
 import { spawn } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createAnthropicLlm, type LlmFn } from './llm';
@@ -42,29 +42,33 @@ export interface LocalAgentResult {
 }
 
 const DEFAULT_TIMEOUT_MS = 180_000;
-const LOGIN_HINT: Record<LocalProvider, string> = { claude: '请先在终端运行 claude login', codex: '请先在终端运行 codex login' };
+const LOGIN_HINT: Record<LocalProvider, string> = { claude: '请先在终端运行 claude auth login', codex: '请先在终端运行 codex login' };
 const INSTALL_HINT: Record<LocalProvider, string> = {
-  claude: '未找到 claude 命令，请先安装 Claude Code CLI 并运行 claude login',
+  claude: '未找到 claude 命令，请先安装 Claude Code CLI 并运行 claude auth login',
   codex: '未找到 codex 命令，请先安装 Codex CLI 并运行 codex login',
 };
 const NOT_LOGGED_IN = /not logged in|please run .*login|log ?in|unauthori[sz]ed|authentication|401|invalid api key|credentials/i;
 
 // —— 简单并发队列 ——
 let running = 0;
-const waiting: (() => void)[] = [];
+const waiting: { limit: number; resolve: () => void }[] = [];
 const concurrencyLimit = (env: NodeJS.ProcessEnv = process.env) => {
   const n = Math.floor(Number(env.LOCAL_AGENT_CONCURRENCY));
   return Number.isFinite(n) && n >= 1 ? Math.min(2, n) : 1;
 };
 async function withSlot<T>(task: () => Promise<T>, limit: number): Promise<T> {
-  if (running >= limit) await new Promise<void>((resolve) => waiting.push(resolve));
-  else running++;
+  const drain = () => {
+    while (waiting.length && running < waiting[0].limit) {
+      running++;
+      waiting.shift()!.resolve();
+    }
+  };
+  await new Promise<void>((resolve) => { waiting.push({ limit, resolve }); drain(); });
   try {
     return await task();
   } finally {
-    const next = waiting.shift();
-    if (next) next(); // 把名额直接交给下一个等待者
-    else running--;
+    running--;
+    drain();
   }
 }
 
@@ -76,20 +80,24 @@ function runProcess(provider: LocalProvider, bin: string, args: string[], stdin:
     let stdout = '';
     let stderr = '';
     let settled = false;
+    let timedOut = false;
     let killTimer: NodeJS.Timeout | undefined;
-    const finish = (fn: () => void) => { if (settled) return; settled = true; clearTimeout(timer); fn(); };
+    const finish = (fn: () => void) => { if (settled) return; settled = true; clearTimeout(timer); clearTimeout(killTimer); fn(); };
     const timer = setTimeout(() => {
+      timedOut = true;
       child.kill('SIGTERM');
       killTimer = setTimeout(() => child.kill('SIGKILL'), 3000); // SIGTERM 无效时兜底
-      killTimer.unref();
-      finish(() => reject(new LocalAgentError('TIMEOUT', `${provider} 调用超过 ${Math.round(timeout / 1000)} 秒未返回，已终止。可调大 LOCAL_AGENT_TIMEOUT_MS 或稍后重试`, provider)));
+      // 等待 close 确认进程退出后再释放并发名额和清理临时目录。
     }, timeout);
     child.stdout.setEncoding('utf8').on('data', (d: string) => { stdout += d; });
     child.stderr.setEncoding('utf8').on('data', (d: string) => { stderr += d; });
     child.on('error', (error: NodeJS.ErrnoException) => finish(() => reject(error.code === 'ENOENT'
       ? new LocalAgentError('NOT_INSTALLED', INSTALL_HINT[provider], provider)
       : new LocalAgentError('EXIT_NONZERO', `${provider} 启动失败：${error.message}`, provider))));
-    child.on('close', (code) => { if (killTimer && settled) return; finish(() => resolve({ stdout, stderr, code })); });
+    child.on('close', (code) => finish(() => {
+      if (timedOut) reject(new LocalAgentError('TIMEOUT', `${provider} 调用超过 ${timeout / 1000} 秒未返回，已终止。可调大 LOCAL_AGENT_TIMEOUT_MS 或稍后重试`, provider));
+      else resolve({ stdout, stderr, code });
+    }));
     child.stdin.on('error', () => { /* 子进程提前退出时忽略 EPIPE，由 close 处理 */ });
     child.stdin.end(stdin);
   });
@@ -140,19 +148,23 @@ export async function runLocalAgent(options: LocalAgentOptions): Promise<LocalAg
   const { provider } = options;
   if (provider !== 'claude' && provider !== 'codex') throw new LocalAgentError('BAD_OUTPUT', `不支持的 provider：${String(provider)}`);
   const bin = options.bin ?? env[provider === 'claude' ? 'LOCAL_AGENT_CLAUDE_BIN' : 'LOCAL_AGENT_CODEX_BIN'] ?? provider;
-  const timeout = options.timeout ?? DEFAULT_TIMEOUT_MS;
+  const configuredTimeout = Number(options.timeout ?? env.LOCAL_AGENT_TIMEOUT_MS);
+  const timeout = Number.isFinite(configuredTimeout) && configuredTimeout > 0 ? configuredTimeout : DEFAULT_TIMEOUT_MS;
   return withSlot(async () => {
     const started = Date.now();
     let cwd = options.cwd;
     let ownDir: string | undefined;
-    if (!cwd) {
-      ownDir = join(tmpdir(), 'local-agent-cwd');
-      await mkdir(ownDir, { recursive: true });
-      cwd = ownDir; // 空目录，避免 CLI 读到项目文件
+    try {
+      if (!cwd) {
+        ownDir = await mkdtemp(join(tmpdir(), 'local-agent-cwd-'));
+        cwd = ownDir; // 每次调用独立的空目录，避免读到上次调用的文件
+      }
+      const run = provider === 'claude' ? runClaude : runCodex;
+      const { text, raw } = await run({ ...options, model: options.model ?? (env.LOCAL_AGENT_MODEL?.trim() || undefined) }, bin, cwd, timeout);
+      return { text, provider, durationMs: Date.now() - started, ...(raw !== undefined ? { raw } : {}) };
+    } finally {
+      if (ownDir) await rm(ownDir, { recursive: true, force: true });
     }
-    const run = provider === 'claude' ? runClaude : runCodex;
-    const { text, raw } = await run(options, bin, cwd, timeout);
-    return { text, provider, durationMs: Date.now() - started, ...(raw !== undefined ? { raw } : {}) };
   }, concurrencyLimit(env));
 }
 

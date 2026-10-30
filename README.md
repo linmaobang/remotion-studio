@@ -44,6 +44,9 @@ npm run dev
 
 示例：`ANTHROPIC_API_KEY=sk-... npm run dev`。
 
+### 用本机 Claude Code / Codex CLI 代替 API Key
+设置 `LLM_PROVIDER=claude-cli` 或 `codex-cli`（`api` 为 API Key 方式；未设置时按有无 key 决定），即可让 /api/plan/* 调用本机已登录的 CLI（额度计入各自订阅，个人本机自用，需遵守各自服务条款；不读取凭据；延迟较高、并发默认 1）。可选 `LOCAL_AGENT_MODEL`、`LOCAL_AGENT_TIMEOUT_MS`、`LOCAL_AGENT_CONCURRENCY`。命令行试用：`npm run ask -- --provider both "问题"`。详见 [docs/local-agent.md](docs/local-agent.md)。
+
 ## 文字生成视频（/create）
 1. 输入需求，可点「示例」填充；选择时长（秒）与横/竖屏；可上传图片、背景音乐、配音。
 2. 点「一键生成视频」：调用 `/api/plan/optimize` 得到方案，创建 `ai-video` 项目并进入 `/editor/<id>`。

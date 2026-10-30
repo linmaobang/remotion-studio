@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "concurrently -k -n web,api -c cyan,green \"vite\" \"tsx watch server/index.ts\"",
     "build": "tsc --noEmit -p . && vite build",
-    "typecheck": "tsc --noEmit -p ."
+    "typecheck": "tsc --noEmit -p .",
+    "ask": "tsx scripts/ask-local-agent.ts"
   },
   "dependencies": {
     "@react-three/fiber": "9.8.2",

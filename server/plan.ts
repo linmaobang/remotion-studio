@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import type { AssetRef, OptimizeRequest, Orientation, PlanResponse, RefineRequest } from '../src/plan/api';
 import { parsePlan, planDuration, type Scene, type VideoPlan } from '../src/plan/schema';
-import { createAnthropicLlm, type LlmFn, type LlmMessage } from './llm';
+import type { LlmFn, LlmMessage } from './llm';
+import { resolveLlm } from './localAgent';
 
 const FPS = 30;
 const DEFAULT_SECONDS = 30;
@@ -219,7 +220,7 @@ export async function refinePlan(plan: VideoPlan, instruction: string, llm: LlmF
   return { plan, usedLLM: false, warnings: [`${attempt.reason}，已原样返回`] };
 }
 
-export function createPlanRouter(getLlm: () => LlmFn | null = () => createAnthropicLlm()) {
+export function createPlanRouter(getLlm: () => LlmFn | null = () => resolveLlm()) {
   const router = Router();
   router.post('/optimize', async (req, res) => {
     const request = normalizeOptimize(req.body);

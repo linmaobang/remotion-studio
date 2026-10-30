@@ -21,6 +21,7 @@
 - 创作画布模板 id 为 `studio-canvas`，项目由多个场景首尾相接组成，总时长 = 各场景帧数之和；编辑场景一律经 `src/lib/editor.ts` 的 `withStudioDuration` 同步时长。
 - 画布所有修改必须经 `StudioWorkbench` 的 `edit(change, group)` 才进撤销栈；同一 group 连续修改合并为一条，`Inspector` 同字段连续输入合并为一次撤销；撤销栈存整个项目快照，上限 100，仅当前编辑会话有效，刷新清空。
 - 画布图层类型为文字、矩形/椭圆/线条、图片、视频、音频；场景背景支持纯色/线性渐变，场景与图层支持入场、出场、循环动画；预设定义在 `src/templates/studio-canvas/presets.ts`。
+- 编辑器预览暂停并停在场景起点（0:00 或转场起点）时，用 `src/templates/shared.tsx` 的 `HoldStartContext` + `StableStart` 把显示时间前移到入场/转场结束后的首个稳定帧；开关默认关闭，只由两个 Workbench 在 Player 外层打开，导出渲染与时间轴、总时长不受影响；新模板需要同样效果时用 `StableStart` 包住场景。
 - VideoPlan schema 定义在 `src/plan/schema.ts`（zod），`parsePlan` 是宽松解析：补默认值、钳制数值、丢弃未知字段和无法识别的场景，永不抛异常；没有任何可用场景时返回失败；成功时多返回 `warnings`，前端应展示。
 - `ai-video` 为方案驱动模板，props 形如 `{plan: VideoPlan}`；创建项目时必须用 `configOf(plan)`（`src/templates/ai-video/index.tsx` 导出）设置 width/height/fps/durationInFrames，因为 Root 的 `calculateMetadata` 不从 plan 推导。
 - 方案编辑器所有修改走 Workbench 的 `edit()`，经 `parsePlan` 修复后用 `withPlan` 同步 width/height/fps/durationInFrames；撤销栈存整个项目快照，上限 100，仅本次会话有效。
@@ -33,20 +34,21 @@
 - 仅本地自用，不做线上部署；首页沿用「分类 + 卡片 + 标签 + Prompt」信息架构。Remotion 商用需按其许可购买 Company License。
 
 ## 当前状态
-本期范围已全部完成并通过验收：项目脚手架与共享契约、内置模板（含 `studio-canvas` 创作画布）、首页模板库与创作入口、后端项目存取/上传/渲染、创作页、创作画布工作台、集成联调与 README 端到端验证；新增文字需求 → 视频闭环，包括 VideoPlan schema 与 API 契约、`ai-video` 方案驱动模板、`/api/plan/optimize|refine`、`/create` 需求输入页与两种自动化模式、方案可视化编辑器（预览、时间轴拖拽排序与调时长、属性面板、AI 修改、撤销重做、防抖自动保存、导出）。typecheck、build 与 57 个测试通过；无 key 端到端跑通并导出 10 秒 1080p h264+aac MP4；ai-video 用 samplePlan 真实渲染 1920×1080、30fps、900 帧 h264 MP4，5 个场景抽帧正常。API 约定见 `docs/api.md`。
+本期范围已全部完成并通过验收：项目脚手架与共享契约、内置模板（含 `studio-canvas` 创作画布）、首页模板库与创作入口、后端项目存取/上传/渲染、创作页、创作画布工作台、集成联调与 README 端到端验证；文字需求 → 视频闭环，包括 VideoPlan schema 与 API 契约、`ai-video` 方案驱动模板、`/api/plan/optimize|refine`、`/create` 需求输入页与两种自动化模式、方案可视化编辑器（预览、时间轴拖拽排序与调时长、属性面板、AI 修改、撤销重做、防抖自动保存、导出）。本轮修复编辑器预览在场景起点黑屏的问题，改为显示该场景首个稳定帧，typecheck 与 57 个测试通过。无 key 端到端跑通并导出 10 秒 1080p h264+aac MP4；ai-video 用 samplePlan 真实渲染 1920×1080、30fps、900 帧 h264 MP4，5 个场景抽帧正常。API 约定见 `docs/api.md`。
 
 ## 遗留问题
+- 预览起始帧修复（`StableStart`）只做了代码核对，未在真实浏览器目视确认 0:00 与转场起点画面，也未重新渲染导出核验，实现在 `src/templates/shared.tsx`、`src/lib/editor.ts`。
+- 带位移入场动画的图层，暂停在场景起点时叠加层框与画面会短暂对不上，涉及 `src/templates/shared.tsx` 与画布/方案编辑器舞台。
+- 自动视觉检查在首页记录 3 条控制台报错与 4 个请求失败（`/api/projects` 502 及一个 404），当时后端未启动、Vite 代理转发失败所致，该 404 资源来源仍待确认。
 - 真实 `ANTHROPIC_API_KEY` 下的 Claude optimize/refine 未实测，refine 路由仅有单测、未 curl 实测；实现在 `server/llm.ts`、`server/plan.ts`。
 - ai-video 的竖屏、BGM 与配音未真实渲染或播放，只有单测确认不抛错；实现在 `src/templates/ai-video/` 与 `server/render.ts`。
 - 方案编辑器与 studio-canvas 的上传素材、素材库按钮、空格播放、场景条拖动排序、图层上下移/锁定、真实鼠标拖拽/`setPointerCapture` 未在真实鼠标键盘下实测，分别在 `src/components/planEditor/` 与 `src/components/studio/`。
-- 编辑器在 0:00 或转场起点预览为黑屏，播放后正常，已写入 README，尚未修复。
 - studio-canvas 的视频/音频图层及打字机、漂浮、旋转动画未真实渲染验证，实现在 `src/templates/studio-canvas/StudioComposition.tsx` 与 `src/templates/studio-canvas/model.ts`。
 - 「标题开场」「图文介绍」两个预设未单独渲染导出，定义在 `src/templates/studio-canvas/presets.ts`。
 - 素材 `src` 前缀改写、尺寸上限与 `fps>60` 钳制的边界情况尚未专门实测，实现在 `server/render.ts`。
 - 首页、`/create`、方案编辑器与创作画布未做完整人工视觉走查，仅验证控制台无报错与流程可用。
 - 首页构建存在打包体积过大告警，尚未优化。
 - 5173 端口存在本项目旧 Vite 进程（PID 31081），非本次启动、未处理，需确认是否清理。
-- 首页曾出现一个未查明资源的 404，来源待确认。
 - `data/` 下保留端到端测试渲染产物（已被 git 忽略），未清理。
 - 早期 `pkill` 误杀 SalesWell 的 Vite 服务（已恢复至 5174），其当前运行状态仍未确认。
 
@@ -54,7 +56,7 @@
 负责人：claude；复核人：codex
 
 ## 更新记录
-- 2026-10-30：更新项目记忆 PROJECT.md，补充文字需求 → 视频闭环（claude）
+- 2026-10-30：修复编辑器预览在场景起点（0:00/转场起点）黑屏，改用 `StableStart` 显示首个稳定帧，typecheck 与 57 个测试通过（claude）
 - 2026-10-30：完成端到端集成验证、README 与 docs/api.md 更新；无 key 下导出 10 秒 1080p h264+aac MP4，修复 `/create` 在 StrictMode 下卡死（claude）
 - 2026-10-30：完成方案可视化编辑器（预览、时间轴拖拽排序与调时长、属性面板、AI 修改、撤销重做、自动保存、导出），57 个测试通过（claude）
 - 2026-10-30：完成 `/create` 需求输入页、两种自动化模式与分步确认向导（claude）

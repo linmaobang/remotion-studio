@@ -1,14 +1,16 @@
 # remotion-studio
 
 ## 项目简介
-基于 Remotion 官方包搭建的本机可视化视频创作网站：可浏览模板、实时预览、修改参数、做简单剪辑并导出 MP4，也可从空白画布自由创作多场景视频。新增「文字需求 → 视频」闭环：输入需求（可附图片/音乐/配音）→ 后端调用 Anthropic API 优化为 VideoPlan 分镜方案（无 key 时走本地规则兜底）→ 在方案编辑器中预览、拖拽调整 → 导出带音轨的 MP4。同一仓库包含 Vite + React + TypeScript 前端与 Express 渲染服务，代码位于 `~/ClaudeCode/projects/remotion-studio/`。仅本地个人学习/自用，服务只监听 `127.0.0.1`，本期不做线上部署。首页版式借鉴 awesome-opus5-5-videos 的「分类 + 卡片 + 标签 + Prompt」信息架构，视觉与内容自行设计。
+基于 Remotion 官方包搭建的本机可视化视频创作网站：可浏览模板、实时预览、修改参数、做简单剪辑并导出 MP4，也可从空白画布自由创作多场景视频。新增「文字需求 → 视频」闭环：输入需求（可附图片/音乐/配音）→ 后端调用 Anthropic API 或本机 Claude Code/Codex CLI 优化为 VideoPlan 分镜方案（无 key 且未选 CLI 时走本地规则兜底）→ 在方案编辑器中预览、拖拽调整 → 导出带音轨的 MP4。同一仓库包含 Vite + React + TypeScript 前端与 Express 渲染服务，代码位于 `~/ClaudeCode/projects/remotion-studio/`。仅本地个人学习/自用，服务只监听 `127.0.0.1`，本期不做线上部署。首页版式借鉴 awesome-opus5-5-videos 的「分类 + 卡片 + 标签 + Prompt」信息架构，视觉与内容自行设计。
 
 ## 如何运行与验证
 - 安装与启动：`npm install` 后 `npm run dev`。前端 Vite `http://127.0.0.1:5173`（已设 `strictPort`），后端 Express `http://127.0.0.1:3217`，Vite 将 `/api` 与 `/files` 代理到后端；`PORT=3218 npm run dev` 可同步覆盖后端与代理端口。
-- 可选 LLM：`ANTHROPIC_API_KEY` 配置后 `/api/plan/*` 调用 Claude；未配置时 optimize 用本地规则生成（`usedLLM:false`），refine 原样返回方案。`LLM_MODEL` 默认 `claude-sonnet-5-5`，每次请求时读取；密钥只从环境变量读取，不落盘。
+- 可选 LLM：`ANTHROPIC_API_KEY` 配置后 `/api/plan/*` 调用 Claude；未配置且未选 CLI 时 optimize 用本地规则生成（`usedLLM:false`），refine 原样返回方案。`LLM_PROVIDER` 可选 `api`/`claude-cli`/`codex-cli`，未设置时有 key 用 API，否则本地规则。`LLM_MODEL` 默认 `claude-sonnet-5-5`，每次请求时读取；密钥只从环境变量读取，不落盘。
+- CLI 模式：`LLM_PROVIDER=claude-cli` 或 `codex-cli` 调用本机已登录 CLI；使用 Claude 订阅时需取消 `ANTHROPIC_API_KEY`，避免改走 API 计费。可选 `LOCAL_AGENT_MODEL`、`LOCAL_AGENT_TIMEOUT_MS`（默认 180000 毫秒）、`LOCAL_AGENT_CONCURRENCY`（默认 1，最大 2）；`npm run ask -- --provider both "问题"` 可测两者，任一失败退出码为 1；plan 调用失败返回 `usedLLM:false` 和原因。完整命令见 `docs/local-agent.md`。
+- 当前受限执行环境真实 CLI 调用仍失败：Claude 连接被拒绝/超时，Codex 初始化被拒绝，尚无真实 `usedLLM:true`；3299 测试后端已关闭，勿将降级响应当作成功。
 - 改过模板或后端代码后需重启后端：服务端 bundle 按进程缓存，旧进程会继续使用旧渲染包。
 - 其他脚本：`npm run typecheck`、`npm run build`；测试：`node --import tsx --test $(find src server -name '*.test.ts' -o -name '*.test.tsx')`。
-- 已通过：typecheck、build、57 个测试；无 key 端到端「上传 → 优化 → 建项目 → 渲染」跑通，导出 10 秒 1080p h264+aac MP4，时长与方案一致。
+- 已通过：build、74 个测试；无 key 端到端「上传 → 优化 → 建项目 → 渲染」跑通，导出 10 秒 1080p h264+aac MP4，时长与方案一致。
 - ai-video 用 samplePlan 真实渲染 1920×1080、30fps、900 帧 h264 MP4，5 个场景抽帧目视正常；studio-canvas 两场景样例真实渲染成功；首页创建、加图层、两场景、导出 MP4 成功。
 - 首页、编辑器与模板页浏览器控制台无报错；首次导出需联网下载 Chrome Headless Shell（Remotion 自动完成，缓存于 `node_modules/.remotion`）。
 - 端口被占用时先用 `lsof -nP -iTCP:端口 -sTCP:LISTEN` 确认占用进程，不要按名字批量杀进程。
@@ -27,6 +29,7 @@
 - 方案编辑器所有修改走 Workbench 的 `edit()`，经 `parsePlan` 修复后用 `withPlan` 同步 width/height/fps/durationInFrames；撤销栈存整个项目快照，上限 100，仅本次会话有效。
 - 画幅限制：横屏 ≤1920×1080，竖屏（高 > 宽）≤1080×1920，宽高取偶数，fps 1–60；`list`/`stat` 场景可能得到空数组，渲染端需兜底；图片字段名为 `imageSrc`。
 - LLM 响应为 `PlanResponse{plan,usedLLM,warnings}`；后端实现 `/api/plan/*` 时应对 LLM 输出先过 `parsePlan`；请求体无效返回 400，refine 降级时 `usedLLM` 为 false 且原样返回 plan。
+- 本地 CLI AI 适配层支持 `LLM_PROVIDER=api|claude-cli|codex-cli`；未设置时有 `ANTHROPIC_API_KEY` 用 API，否则本地规则。适配层不读取凭据文件，继承终端环境；使用 Claude 订阅时需取消 `ANTHROPIC_API_KEY`。`LOCAL_AGENT_TIMEOUT_MS` 默认 180000 毫秒，`LOCAL_AGENT_CONCURRENCY` 默认 1、最大 2；`both` 依次调用两者，任一失败退出码为 1；plan 调用失败返回 `usedLLM:false` 和原因，不得将降级响应当作成功。返工修复了进程回收、并发队列、临时目录及脚本退出码，实现与验证见 `localAgent.ts`、`localAgent.test.ts`、`ask-local-agent.ts`、`docs/local-agent.md`。
 - 文字生成视频支持两种自动化模式：一键全自动（默认）与分步确认，开关保存在 localStorage（键 `remotion-studio.create-mode`），向导进行中也能切换。
 - 渲染限制：编码 h264（带音轨时为 h264/aac），横屏最高 1920×1080、竖屏最高 1080×1920，宽高自动钳为偶数，帧率 1–60；素材地址以 `/` 开头时渲染前改写为 `http://127.0.0.1:${PORT||3217}` 前缀；`server/render.ts` 额外改写 `imageSrc` 与 `backgroundSrc`。
 - 前后端同仓库：Vite + React + TS 前端，Express 渲染服务；数据落在 `data/projects/*.json`、`data/uploads/`（单文件上限 2GB）、`data/renders/*.mp4`，该目录已被 git 忽略，通过 `/files/uploads/...`、`/files/renders/...` 访问。
@@ -34,13 +37,14 @@
 - 仅本地自用，不做线上部署；首页沿用「分类 + 卡片 + 标签 + Prompt」信息架构。Remotion 商用需按其许可购买 Company License。
 
 ## 当前状态
-本期范围已全部完成并通过验收：项目脚手架与共享契约、内置模板（含 `studio-canvas` 创作画布）、首页模板库与创作入口、后端项目存取/上传/渲染、创作页、创作画布工作台、集成联调与 README 端到端验证；文字需求 → 视频闭环，包括 VideoPlan schema 与 API 契约、`ai-video` 方案驱动模板、`/api/plan/optimize|refine`、`/create` 需求输入页与两种自动化模式、方案可视化编辑器（预览、时间轴拖拽排序与调时长、属性面板、AI 修改、撤销重做、防抖自动保存、导出）。本轮修复编辑器预览在场景起点黑屏的问题，改为显示该场景首个稳定帧，typecheck 与 57 个测试通过。无 key 端到端跑通并导出 10 秒 1080p h264+aac MP4；ai-video 用 samplePlan 真实渲染 1920×1080、30fps、900 帧 h264 MP4，5 个场景抽帧正常。API 约定见 `docs/api.md`。
+本期范围已全部完成并通过验收：项目脚手架与共享契约、内置模板（含 `studio-canvas` 创作画布）、首页模板库与创作入口、后端项目存取/上传/渲染、创作页、创作画布工作台、集成联调与 README 端到端验证；文字需求 → 视频闭环，包括 VideoPlan schema 与 API 契约、`ai-video` 方案驱动模板、`/api/plan/optimize|refine`、`/create` 需求输入页与两种自动化模式、方案可视化编辑器（预览、时间轴拖拽排序与调时长、属性面板、AI 修改、撤销重做、防抖自动保存、导出）。新增本地 CLI AI 适配层（`claude-cli`/`codex-cli`）并完成返工：修复进程回收、并发队列、临时目录及脚本退出码，build 与 74 个测试通过；真实 CLI 调用仍受环境限制（Claude 连接失败、Codex 初始化权限被拒），未验证真实 `usedLLM:true`。无 key 端到端跑通并导出 10 秒 1080p h264+aac MP4；ai-video 用 samplePlan 真实渲染 1920×1080、30fps、900 帧 h264 MP4，5 个场景抽帧正常。API 约定见 `docs/api.md`，CLI 验证见 `docs/local-agent.md`。
 
 ## 遗留问题
-- 预览起始帧修复（`StableStart`）只做了代码核对，未在真实浏览器目视确认 0:00 与转场起点画面，也未重新渲染导出核验，实现在 `src/templates/shared.tsx`、`src/lib/editor.ts`。
+- 编辑器预览起始帧修复（`StableStart`）只做了代码核对，未在真实浏览器目视确认 0:00 与转场起点画面，也未重新渲染导出核验，实现在 `src/templates/shared.tsx`、`src/lib/editor.ts`。
 - 带位移入场动画的图层，暂停在场景起点时叠加层框与画面会短暂对不上，涉及 `src/templates/shared.tsx` 与画布/方案编辑器舞台。
 - 自动视觉检查在首页记录 3 条控制台报错与 4 个请求失败（`/api/projects` 502 及一个 404），当时后端未启动、Vite 代理转发失败所致，该 404 资源来源仍待确认。
 - 真实 `ANTHROPIC_API_KEY` 下的 Claude optimize/refine 未实测，refine 路由仅有单测、未 curl 实测；实现在 `server/llm.ts`、`server/plan.ts`。
+- 本地 CLI（`claude-cli`/`codex-cli`）真实调用未验证：Claude 连接被拒绝/超时，Codex 初始化权限被拒，两个 provider 均无真实 `usedLLM:true`；实现在 `localAgent.ts`，验证记录见 `docs/local-agent.md`。
 - ai-video 的竖屏、BGM 与配音未真实渲染或播放，只有单测确认不抛错；实现在 `src/templates/ai-video/` 与 `server/render.ts`。
 - 方案编辑器与 studio-canvas 的上传素材、素材库按钮、空格播放、场景条拖动排序、图层上下移/锁定、真实鼠标拖拽/`setPointerCapture` 未在真实鼠标键盘下实测，分别在 `src/components/planEditor/` 与 `src/components/studio/`。
 - studio-canvas 的视频/音频图层及打字机、漂浮、旋转动画未真实渲染验证，实现在 `src/templates/studio-canvas/StudioComposition.tsx` 与 `src/templates/studio-canvas/model.ts`。
@@ -56,6 +60,7 @@
 负责人：claude；复核人：codex
 
 ## 更新记录
+- 2026-10-30：本地 CLI AI 适配层返工验收通过，修复进程回收、并发队列、临时目录及脚本退出码，74 项测试与构建通过；真实 CLI 有效响应与 `usedLLM:true` 未验证（codex）
 - 2026-10-30：修复编辑器预览在场景起点（0:00/转场起点）黑屏，改用 `StableStart` 显示首个稳定帧，typecheck 与 57 个测试通过（claude）
 - 2026-10-30：完成端到端集成验证、README 与 docs/api.md 更新；无 key 下导出 10 秒 1080p h264+aac MP4，修复 `/create` 在 StrictMode 下卡死（claude）
 - 2026-10-30：完成方案可视化编辑器（预览、时间轴拖拽排序与调时长、属性面板、AI 修改、撤销重做、自动保存、导出），57 个测试通过（claude）
@@ -70,4 +75,3 @@
 - 2026-10-29：完成集成联调、README 与端到端验证，首页/编辑器/7 个模板页控制台无报错（claude）
 - 2026-10-29：创作页返工，补 `PreviewPane.tsx` 类型标注使 tsc 退出码 0，原 TS7031 阻断问题解决（claude）
 - 2026-10-29：后端项目存取/上传/渲染返工通过，3217 端口 curl 全流程与 MP4 导出验证成功；服务默认端口由 3001 改为 3217 并支持 `PORT` 覆盖（claude、codex）
-- 2026-10-29：完成首页模板库，数据驱动分类搜索、悬停预览、Prompt 复制与项目创建（codex）

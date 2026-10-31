@@ -76,4 +76,50 @@
 - 2026-10-30：完成 VideoPlan schema、`parsePlan`、API 契约与 7 个单测（claude）
 - 2026-10-29：完成首页创作入口与端到端验证，新增 3 个预设与 README 创作画布章节，33 个测试通过（claude）
 - 2026-10-29：完成场景条、图层列表与撤销重做，25 个相关测试 0 失败（claude）
+
+## 验证记录
+
+### 2026-10-31：真实 LLM 接口验证（tester）
+
+仅验证真实接口并追加本记录，未修改代码。测试时间为北京时间约 09:05–09:08。启动前 3217 无监听，以 `PORT=3217 npx tsx server/index.ts` 启动本次后端，日志为 `API listening on http://127.0.0.1:3217`。`LOCAL_AGENT_TIMEOUT_MS` 未设置，使用默认 180000 毫秒；没有指定假 CLI，没有读取或修改凭据文件。
+
+1. `curl -sS -m 20 http://127.0.0.1:3217/api/plan/providers`：HTTP **200**，耗时 **0.004393 秒**，实际响应：
+
+   ```json
+   {"providers":[{"id":"api","label":"Anthropic API","available":false,"reason":"未设置 ANTHROPIC_API_KEY 环境变量"},{"id":"claude","label":"Claude Code","available":true},{"id":"codex","label":"Codex","available":true}],"defaultProvider":"claude","allowHeuristic":false}
+   ```
+
+   此处 CLI 的 `available:true` 仅说明命令可执行文件存在，不验证登录态或模型服务连接，也不代表生成成功。
+
+2. 两次 optimize 均使用以下真实 curl 命令，只替换请求体中的 provider：
+
+   ```bash
+   curl -sS -m 300 -X POST http://127.0.0.1:3217/api/plan/optimize \
+     -H 'Content-Type: application/json' \
+     --data '{"prompt":"15秒咖啡店开业宣传视频","provider":"codex"}'
+   # 第二次请求体为 {"prompt":"15秒咖啡店开业宣传视频","provider":"claude"}
+   ```
+
+   实际执行另用 curl 的 `-D` / `-o` / `-w` 保存响应头、正文，并采集 HTTP 状态和耗时；没有使用 `--fail`，故以下两次 curl 自身均退出 0，业务请求均失败。
+
+   | 请求 provider | HTTP 状态 | 耗时 | 响应 usedLLM | 响应 provider | 场景标题 |
+   |---|---|---|---|---|---|
+   | `codex` | **502 Bad Gateway** | **1.091825 秒** | 未返回该字段 | 未返回该字段 | 无，未返回 plan |
+   | `claude` | **502 Bad Gateway** | **173.604257 秒** | 未返回该字段 | 未返回该字段 | 无，未返回 plan |
+
+   codex 原始错误响应：
+
+   ```json
+   {"error":"LLM 调用失败：codex 执行失败（退出码 1）：WARNING: proceeding, even though we could not create PATH aliases: Operation not permitted (os error 1)\nError: failed to initialize in-process app-server client: Operation not permitted (os error 1)。请检查 Claude Code / Codex 是否已登录（claude login / codex login）、网络是否可用，或调大 LOCAL_AGENT_TIMEOUT_MS 后重试。"}
+   ```
+
+   claude 原始错误响应：
+
+   ```json
+   {"error":"LLM 调用失败：claude 执行失败（退出码 1）：API Error: Connection refused — a firewall or proxy may be blocking it (ECONNREFUSED)。请检查 Claude Code / Codex 是否已登录（claude login / codex login）、网络是否可用，或调大 LOCAL_AGENT_TIMEOUT_MS 后重试。"}
+   ```
+
+3. Claude 本次在默认 180 秒时限内以 `EXIT_NONZERO` / `ECONNREFUSED` 失败，**不是 TIMEOUT，也不是 curl 300 秒超时**，因此未触发“仍超时则把 `LOCAL_AGENT_TIMEOUT_MS` 调大到 400000 再试”的条件，没有执行该超时重试。用户此前报告 `npm run ask -- --provider both "回复 OK"` 的 codex 返回 OK（20.5 秒）、claude 180 秒 TIMEOUT；这是此前终端结果，不作为本轮 optimize 成功证据。本轮两个 provider 均未得到 `usedLLM:true`，也没有生成本地降级方案。
+
+4. 收尾：本次启动会话已通过 Ctrl-C 结束（退出码 130）；再次执行 `lsof -nP -iTCP:3217 -sTCP:LISTEN` 无输出、退出码 1，确认 3217 无监听。未终止外部进程，未创建项目、上传或渲染测试数据。真实生成成功及场景标题贴合度仍未验证；本轮只记录失败，未尝试修改实现或绕过权限限制。
 - 2026-10-29：完成画布舞台与属性面板，支持拖动、八向缩放、旋转、内联改字与快捷键（claude）

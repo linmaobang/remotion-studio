@@ -8,7 +8,7 @@
 - 可选 LLM：`ANTHROPIC_API_KEY` 配置后 `/api/plan/*` 可调用 Claude；`LLM_PROVIDER` 可选 `api`/`claude-cli`/`codex-cli`，未设置时按 API Key → PATH 中的 `claude` → `codex` 自动探测（不读凭据文件）；页面「AI 引擎」选择和请求体 `provider` 优先于 `LLM_PROVIDER`。`LLM_MODEL` 默认 `claude-sonnet-5-5`，每次请求时读取；密钥只从环境变量读取，不落盘。
 - 降级策略：默认不静默降级，无可用引擎返回 503，AI 调用失败返回 502 并带原因，页面显示错误可重试；仅 `PLAN_ALLOW_HEURISTIC=1` 时允许退回本地固定模板，响应明确标注且页面红字提示。
 - CLI 模式：`LLM_PROVIDER=claude-cli` 或 `codex-cli` 调用本机已登录 CLI；使用 Claude 订阅时需取消 `ANTHROPIC_API_KEY`，避免改走 API 计费。可选 `LOCAL_AGENT_MODEL`、`LOCAL_AGENT_TIMEOUT_MS`（默认 180000 毫秒）、`LOCAL_AGENT_CONCURRENCY`（默认 1，最大 2）；`npm run ask -- --provider both "问题"` 可测两者，任一失败退出码为 1；plan 调用失败返回 502 和原因。完整命令见 `docs/local-agent.md`。
-- 当前受限执行环境真实 CLI 调用仍失败：claude 180 秒超时后返回 502，codex 读不到 config.toml 返回 502，尚无真实 `usedLLM:true`；勿将降级响应当作成功。
+- 2026-10-31 真实验证：providers 验证完成；codex optimize 与 claude optimize 均返回 502，未得到 `usedLLM:true`；codex 初始化权限被拒，claude 连接被拒；本次非超时，未触发 400000 毫秒重试；测试后端已关闭。该验证记录含耗时、字段缺失及原始错误；勿将降级响应当作成功。
 - 改过模板或后端代码后需重启后端：服务端 bundle 按进程缓存，旧进程会继续使用旧渲染包。
 - 其他脚本：`npm run typecheck`、`npm run build`；测试：`node --import tsx --test $(find src server -name '*.test.ts' -o -name '*.test.tsx')`。
 - 已通过：build、81 个测试；端到端「上传 → 优化 → 建项目 → 渲染」曾跑通（当时无 key、走本地规则兜底），导出 10 秒 1080p h264+aac MP4，时长与方案一致。
@@ -38,17 +38,18 @@
 - 仅本地自用，不做线上部署；首页沿用「分类 + 卡片 + 标签 + Prompt」信息架构。Remotion 商用需按其许可购买 Company License。
 
 ## 当前状态
-项目主体功能已完成：脚手架与共享契约、内置模板（含 `studio-canvas` 创作画布）、首页模板库与创作入口、后端项目存取/上传/渲染、创作页、创作画布工作台、集成联调；文字需求 → 视频闭环（VideoPlan schema、`ai-video` 模板、`/api/plan/optimize|refine`、`/create` 两种自动化模式、方案编辑器）。2026-10-30 取消 AI 静默降级：无可用引擎返回 503、AI 失败返回 502；页面可选引擎并显示状态，引擎自动探测（API Key → 本机 claude → codex）、提示词与场景表达力增强；build 与 81 个测试通过。该轮状态为部分完成：真实 `usedLLM:true` 仍未验证（沙箱内 claude 180 秒超时返回 502，codex 读不到 config.toml 返回 502）；生成内容是否贴合需求未验证；未新增 quote 场景类型。经理反馈「文字需求 → 视频」仍直接产出预设模板，期望先设置 Remotion 基础参数生成视频再让用户调整，该方向待落实。API 约定见 `docs/api.md`，CLI 验证见 `docs/local-agent.md`。
+项目主体功能已完成：脚手架与共享契约、内置模板（含 `studio-canvas` 创作画布）、首页模板库与创作入口、后端项目存取/上传/渲染、创作页、创作画布工作台、集成联调；文字需求 → 视频闭环（VideoPlan schema、`ai-video` 模板、`/api/plan/optimize|refine`、`/create` 两种自动化模式、方案编辑器）。2026-10-30 取消 AI 静默降级：无可用引擎返回 503、AI 失败返回 502；页面可选引擎并显示状态，引擎自动探测（API Key → 本机 claude → codex）、提示词与场景表达力增强；build 与 81 个测试通过。2026-10-31 codex 真实验证 providers、codex optimize、claude optimize；后两项均 502，未得到 `usedLLM:true`；codex 初始化权限被拒，claude 连接被拒，本次非超时、未触发 400000 毫秒重试；测试后端已关闭。该轮仍为部分完成：真实生成成功与场景标题未验证；生成内容是否贴合需求未验证；未新增 quote 场景类型。经理反馈「文字需求 → 视频」仍直接产出预设模板，期望先设置 Remotion 基础参数生成视频再让用户调整，该方向待落实。API 约定见 `docs/api.md`，CLI 验证见 `docs/local-agent.md`。
 
 ## 遗留问题
 - 经理反馈「文字需求 → 视频」仍直接产出预设模板，未按期望先设置 Remotion 基础参数生成视频再让用户调整；涉及 `src/pages/Create.tsx`、`server/plan.ts`、`src/templates/ai-video/`。
-- 真实 `usedLLM:true` 未验证：沙箱内 claude 180 秒超时后返回 502，codex 读不到 config.toml 返回 502；需在普通终端用 `provider:claude` 与 `codex` 各跑一次 optimize 并检查场景标题，涉及 `server/localAgent.ts`、`server/plan.ts`。
+- 真实 `usedLLM:true` 未取得：2026-10-31 验证中 codex optimize 与 claude optimize 均 502（codex 初始化权限被拒、claude 连接被拒），本次非超时、未触发 400000 毫秒重试；需在普通终端跑 `npm run ask -- --provider both` 及两种 `LLM_PROVIDER` 的 curl，涉及 `server/localAgent.ts`、`server/plan.ts`。
+- 真实生成成功与场景标题仍无法验证，涉及 `server/plan.ts` 与 `src/templates/ai-video/`。
 - 生成内容是否贴合用户需求未验证，涉及 `server/plan.ts` 与 `src/templates/ai-video/`。
 - 未新增 quote 场景类型，涉及 `src/plan/schema.ts` 与 `src/templates/ai-video/`。
 - 真实 `ANTHROPIC_API_KEY` 下的 Claude optimize/refine 未实测，refine 路由仅有单测、未 curl 实测；实现在 `server/llm.ts`、`server/plan.ts`。
 - 编辑器预览起始帧修复（`StableStart`）只做了代码核对，未在真实浏览器目视确认 0:00 与转场起点画面，也未重新渲染导出核验，实现在 `src/templates/shared.tsx`、`src/lib/editor.ts`。
 - 带位移入场动画的图层，暂停在场景起点时叠加层框与画面会短暂对不上，涉及 `src/templates/shared.tsx` 与画布/方案编辑器舞台。
-- 自动视觉检查在首页记录 3 条控制台报错与 4 个请求失败（`/api/projects` 502 及一个 404），当时后端未启动、Vite 代理转发失败所致，该 404 资源来源仍待确认。
+- 首页自动视觉检查曾记录 3 条控制台报错与 4 个请求失败（`/api/projects` 502 等），当时后端未启动、Vite 代理转发失败所致；其中一个 404 资源来源仍待确认。
 - ai-video 的竖屏、BGM 与配音未真实渲染或播放，只有单测确认不抛错；实现在 `src/templates/ai-video/` 与 `server/render.ts`。
 - 方案编辑器与 studio-canvas 的上传素材、素材库按钮、空格播放、场景条拖动排序、图层上下移/锁定、真实鼠标拖拽/`setPointerCapture` 未在真实鼠标键盘下实测，分别在 `src/components/planEditor/` 与 `src/components/studio/`。
 - studio-canvas 的视频/音频图层及打字机、漂浮、旋转动画未真实渲染验证，实现在 `src/templates/studio-canvas/StudioComposition.tsx` 与 `src/templates/studio-canvas/model.ts`。
@@ -64,6 +65,7 @@
 负责人：claude；复核人：codex
 
 ## 更新记录
+- 2026-10-31：真实验证 providers、codex optimize、claude optimize；后两项均 502，未得到 `usedLLM:true`；codex 初始化权限被拒、claude 连接被拒，本次非超时，测试后端已关闭；新增验证记录并更新 PROJECT.md（codex）
 - 2026-10-30：更新项目记忆 PROJECT.md（linmaobang）
 - 2026-10-30：取消 AI 静默降级，无可用引擎返回 503、AI 失败返回 502；新增引擎自动探测与页面引擎选择、提示词与场景表达力增强，81 项测试与构建通过；真实 `usedLLM:true` 仍未验证，该轮状态部分完成（claude）
 - 2026-10-30：本地 CLI AI 适配层返工验收通过，修复进程回收、并发队列、临时目录及脚本退出码，74 项测试与构建通过；真实 CLI 有效响应与 `usedLLM:true` 未验证（codex）
@@ -76,50 +78,3 @@
 - 2026-10-30：完成 VideoPlan schema、`parsePlan`、API 契约与 7 个单测（claude）
 - 2026-10-29：完成首页创作入口与端到端验证，新增 3 个预设与 README 创作画布章节，33 个测试通过（claude）
 - 2026-10-29：完成场景条、图层列表与撤销重做，25 个相关测试 0 失败（claude）
-
-## 验证记录
-
-### 2026-10-31：真实 LLM 接口验证（tester）
-
-仅验证真实接口并追加本记录，未修改代码。测试时间为北京时间约 09:05–09:08。启动前 3217 无监听，以 `PORT=3217 npx tsx server/index.ts` 启动本次后端，日志为 `API listening on http://127.0.0.1:3217`。`LOCAL_AGENT_TIMEOUT_MS` 未设置，使用默认 180000 毫秒；没有指定假 CLI，没有读取或修改凭据文件。
-
-1. `curl -sS -m 20 http://127.0.0.1:3217/api/plan/providers`：HTTP **200**，耗时 **0.004393 秒**，实际响应：
-
-   ```json
-   {"providers":[{"id":"api","label":"Anthropic API","available":false,"reason":"未设置 ANTHROPIC_API_KEY 环境变量"},{"id":"claude","label":"Claude Code","available":true},{"id":"codex","label":"Codex","available":true}],"defaultProvider":"claude","allowHeuristic":false}
-   ```
-
-   此处 CLI 的 `available:true` 仅说明命令可执行文件存在，不验证登录态或模型服务连接，也不代表生成成功。
-
-2. 两次 optimize 均使用以下真实 curl 命令，只替换请求体中的 provider：
-
-   ```bash
-   curl -sS -m 300 -X POST http://127.0.0.1:3217/api/plan/optimize \
-     -H 'Content-Type: application/json' \
-     --data '{"prompt":"15秒咖啡店开业宣传视频","provider":"codex"}'
-   # 第二次请求体为 {"prompt":"15秒咖啡店开业宣传视频","provider":"claude"}
-   ```
-
-   实际执行另用 curl 的 `-D` / `-o` / `-w` 保存响应头、正文，并采集 HTTP 状态和耗时；没有使用 `--fail`，故以下两次 curl 自身均退出 0，业务请求均失败。
-
-   | 请求 provider | HTTP 状态 | 耗时 | 响应 usedLLM | 响应 provider | 场景标题 |
-   |---|---|---|---|---|---|
-   | `codex` | **502 Bad Gateway** | **1.091825 秒** | 未返回该字段 | 未返回该字段 | 无，未返回 plan |
-   | `claude` | **502 Bad Gateway** | **173.604257 秒** | 未返回该字段 | 未返回该字段 | 无，未返回 plan |
-
-   codex 原始错误响应：
-
-   ```json
-   {"error":"LLM 调用失败：codex 执行失败（退出码 1）：WARNING: proceeding, even though we could not create PATH aliases: Operation not permitted (os error 1)\nError: failed to initialize in-process app-server client: Operation not permitted (os error 1)。请检查 Claude Code / Codex 是否已登录（claude login / codex login）、网络是否可用，或调大 LOCAL_AGENT_TIMEOUT_MS 后重试。"}
-   ```
-
-   claude 原始错误响应：
-
-   ```json
-   {"error":"LLM 调用失败：claude 执行失败（退出码 1）：API Error: Connection refused — a firewall or proxy may be blocking it (ECONNREFUSED)。请检查 Claude Code / Codex 是否已登录（claude login / codex login）、网络是否可用，或调大 LOCAL_AGENT_TIMEOUT_MS 后重试。"}
-   ```
-
-3. Claude 本次在默认 180 秒时限内以 `EXIT_NONZERO` / `ECONNREFUSED` 失败，**不是 TIMEOUT，也不是 curl 300 秒超时**，因此未触发“仍超时则把 `LOCAL_AGENT_TIMEOUT_MS` 调大到 400000 再试”的条件，没有执行该超时重试。用户此前报告 `npm run ask -- --provider both "回复 OK"` 的 codex 返回 OK（20.5 秒）、claude 180 秒 TIMEOUT；这是此前终端结果，不作为本轮 optimize 成功证据。本轮两个 provider 均未得到 `usedLLM:true`，也没有生成本地降级方案。
-
-4. 收尾：本次启动会话已通过 Ctrl-C 结束（退出码 130）；再次执行 `lsof -nP -iTCP:3217 -sTCP:LISTEN` 无输出、退出码 1，确认 3217 无监听。未终止外部进程，未创建项目、上传或渲染测试数据。真实生成成功及场景标题贴合度仍未验证；本轮只记录失败，未尝试修改实现或绕过权限限制。
-- 2026-10-29：完成画布舞台与属性面板，支持拖动、八向缩放、旋转、内联改字与快捷键（claude）

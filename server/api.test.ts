@@ -87,6 +87,10 @@ test('项目 CRUD、上传、错误响应通过已挂载 API', { timeout: 30000 
     assert.equal(file.name, 'a_b.txt');
     assert.equal(file.mime, 'text/plain');
     assert.equal(await (await fetch(`${origin}${file.url}`)).text(), 'small upload');
+    const audioForm = new FormData();
+    audioForm.append('file', new Blob(['fake audio'], { type: 'application/octet-stream' }), 'Song.MP3');
+    const audio = await (await fetch(`${origin}/api/upload`, { method: 'POST', body: audioForm })).json() as { mime: string };
+    assert.equal(audio.mime, 'audio/mpeg');
     assert.equal((await fetch(`${origin}/api/upload`, { method: 'POST', body: new FormData() })).status, 400);
     assert.equal((await fetch(`${origin}/api/projects/${saved.id}`, { method: 'DELETE' })).status, 204);
     assert.equal((await fetch(`${origin}/api/projects/${saved.id}`)).status, 404);

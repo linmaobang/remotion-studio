@@ -42,7 +42,7 @@
 
 ## 遗留问题
 - 经理反馈「文字需求 → 视频」仍直接产出预设模板，未按期望先设置 Remotion 基础参数生成视频再让用户调整，涉及 `src/pages/Create.tsx`、`server/plan.ts`、`src/templates/ai-video/`。
-- 真实 `usedLLM:true` 未验证：2026-10-31 与 2026-11-03 两次复测 claude/codex optimize 均返回 502，需在本人普通终端且 CLI 已登录时依次各跑一次并记录耗时与场景标题，涉及 `server/localAgent.ts`、`server/plan.ts`。
+- 真实 `usedLLM:true` 未验证（仍未关闭）：2026-10-31、2026-11-03、2026-11-04 三次复测 claude/codex optimize 均返回 502。2026-11-04（沙箱内，PORT=3217，请求体 `provider`，需求「手冲咖啡竖屏短视频，展示研磨、注水、品尝」15 秒竖屏）：claude 耗时 180 秒、HTTP 502（调用超过 180 秒被终止；`claude auth status` 显示已登录，沙箱外网被拒，此前同类调用报 ECONNREFUSED），codex 耗时 0 秒、HTTP 502（沙箱禁止读取 `~/.codex/config.toml`，Operation not permitted）；两次均无 plan，usedLLM 与场景标题均无。需在本人普通终端依次运行：`env -u ANTHROPIC_API_KEY PORT=3217 npx tsx server/index.ts`，另开终端 `curl -s -X POST localhost:3217/api/plan/optimize -H 'content-type: application/json' -d '{"prompt":"手冲咖啡竖屏短视频，展示研磨、注水、品尝","durationSec":15,"orientation":"portrait","provider":"claude"}'`，再把 provider 换成 `codex`（可改用 `LLM_PROVIDER=claude-cli|codex-cli`），并记录耗时与场景标题，需在本人普通终端且 CLI 已登录时依次各跑一次并记录耗时与场景标题，涉及 `server/localAgent.ts`、`server/plan.ts`。
 - 生成内容是否贴合用户需求未验证，涉及 `server/plan.ts` 与 `src/templates/ai-video/`。
 - 未新增 quote 场景类型，涉及 `src/plan/schema.ts` 与 `src/templates/ai-video/`。
 - 真实 `ANTHROPIC_API_KEY` 下的 Claude optimize/refine 未实测，refine 路由仅有单测、未 curl 实测，实现在 `server/llm.ts`、`server/plan.ts`。

@@ -53,7 +53,8 @@
 - 编辑器预览起始帧修复（`StableStart`）只做了代码核对，未在真实浏览器目视确认 0:00 与转场起点画面，也未重新渲染导出核验，实现在 `src/templates/shared.tsx`、`src/lib/editor.ts`。
 - 带位移入场动画的图层，暂停在场景起点时叠加层框与画面会短暂对不上，涉及 `src/templates/shared.tsx` 与画布/方案编辑器舞台。
 - 页面检查仍有控制台 404 与站内请求被中止（ERR_ABORTED），2026-11-04 在首页与 `/editor/1e9378c0-202e-4660-b877-9d399a38f609` 复现，来源未追查，涉及首页与 `/create`、`/editor` 页面。
-- ai-video 的竖屏、BGM 与配音未真实渲染或播放，只有单测确认不抛错，实现在 `src/templates/ai-video/` 与 `server/render.ts`。
+- ai-video 竖屏、BGM、配音的**浏览器内播放**仍未实测（渲染导出已于 2026-11-05 验证，见下条）。
+- 2026-11-05 已真实渲染验证 ai-video 竖屏 + BGM + 配音：`samplePlan()` 改 `format` 为 1080×1920/30fps，`audio.bgm` 为 330Hz 正弦 mp3（音量 0.5、loop）、`audio.voiceover` 为 880Hz 正弦 wav（startFrame 30），经 `POST /api/upload` 上传 → `POST /api/projects`（templateId ai-video）→ `POST /api/render` 轮询到 done（PORT=3217，约 1 分钟）。产物 `data/renders/3ce9df0c-3fe8-45b1-a897-c38864dfe2e7.mp4`；ffprobe：h264 1080×1920、30fps、900 帧、30.0 秒，另有 aac 音轨 30.016 秒；volumedetect 整体 mean -27.8 dB、max -17.6 dB（非静音）；带通分析：330Hz（BGM）在 0–30 秒全程存在，880Hz（配音）仅在约 1–7 秒窗口出现（0–0.9 秒与 10 秒后约 -65 dB 即无，2–6 秒 -24 dB），说明 BGM 全程、配音按 startFrame 起播且混音正确；抽帧 8 秒（图文场景，竖屏上下布局、图占位在上、文案在下）与 20 秒（数据场景，三张卡片纵向排列、数字计数动画中）目视正常，无黑屏、无溢出。未发现 bug；未改源码。未覆盖：浏览器内预览播放、`loop:false`、voiceover 长于视频、真实人声/长音频。
 - 方案编辑器与 studio-canvas 的上传素材、素材库按钮、空格播放、场景条拖动排序、图层上下移/锁定、真实鼠标拖拽/`setPointerCapture` 未在真实鼠标键盘下实测，分别在 `src/components/planEditor/` 与 `src/components/studio/`。
 
 ## 负责人

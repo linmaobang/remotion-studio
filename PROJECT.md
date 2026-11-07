@@ -8,7 +8,7 @@
 - 可选 LLM：`ANTHROPIC_API_KEY` 配置后 `/api/plan/*` 可调用 Claude；`LLM_PROVIDER` 可选 `api`/`claude-cli`/`codex-cli`，未设置时按 API Key → PATH 中的 `claude` → `codex` 自动探测（不读凭据文件）；页面「AI 引擎」选择和请求体 `provider` 优先于 `LLM_PROVIDER`。`LLM_MODEL` 默认 `claude-sonnet-5-5`，每次请求时读取；密钥只从环境变量读取，不落盘。
 - 降级策略：默认不静默降级，无可用引擎返回 503，AI 调用失败返回 502 并带原因，页面显示错误可重试；仅 `PLAN_ALLOW_HEURISTIC=1` 时允许退回本地固定模板，响应明确标注且页面红字提示。
 - CLI 模式：`LLM_PROVIDER=claude-cli` 或 `codex-cli` 调用本机已登录 CLI；使用 Claude 订阅时需取消 `ANTHROPIC_API_KEY`，避免改走 API 计费。可选 `LOCAL_AGENT_MODEL`、`LOCAL_AGENT_TIMEOUT_MS`（默认 180000 毫秒）、`LOCAL_AGENT_CONCURRENCY`（默认 1，最大 2）。`npm run ask -- --provider both "问题"` 可测两者，任一失败退出码为 1；完整命令见 `docs/local-agent.md`。
-- 真实 AI 验证现状：2026-10-31、11-03、11-04、11-06 在 agent 沙箱复测 claude/codex optimize 均返回 502，始终未见 `usedLLM:true`（claude 连接被拒/超时，codex 读不到 `~/.codex/config.toml`、初始化权限被拒）。需在本人普通终端且 CLI 已登录时启动 `env -u ANTHROPIC_API_KEY PORT=3217 npx tsx server/index.ts`，另开终端对 `/api/plan/optimize` 用 `provider:"claude"` 与 `provider:"codex"` 各 curl 一次，记录耗时与场景标题；2026-11-03 记录见 `docs/real-ai-test-2026-11-03.md`，2026-11-06 完整响应与日志在 `/tmp/remotion-real-ai-20261106-is7wgnd5/`。
+- 真实 AI 验证现状：2026-10-31、11-03、11-04、11-06、11-07 在 agent 沙箱复测 claude/codex optimize 均返回 502，始终未见 `usedLLM:true`（claude 连接被拒/150 秒超时，codex 读不到 `~/.codex/config.toml`、初始化权限被拒）。待办：在本人普通终端执行 `cd ~/ClaudeCode/projects/remotion-studio && env -u ANTHROPIC_API_KEY PORT=3299 LLM_PROVIDER=claude-cli npx tsx server/index.ts`，另开终端 `curl -s -m 170 -X POST localhost:3299/api/plan/optimize -H 'content-type: application/json' -d '{"prompt":"30秒咖啡店宣传片","durationSec":30}'`，Ctrl-C 后换 `LLM_PROVIDER=codex-cli` 重复，记录耗时、`usedLLM` 与场景标题；`api` 引擎因环境无 `ANTHROPIC_API_KEY` 未测。2026-11-03 记录见 `docs/real-ai-test-2026-11-03.md`，2026-11-06 日志在 `/tmp/remotion-real-ai-20261106-is7wgnd5/`。
 - 上传 mime 验证：`npm run dev` 后执行 `curl -F "file=@x.mp3;type=application/octet-stream" http://127.0.0.1:5173/api/upload`，返回的 `mime` 应为 `audio/mpeg`。
 - 改过模板或后端代码后需重启后端：服务端 bundle 按进程缓存，旧进程会继续使用旧渲染包。
 - 其他脚本：`npm run typecheck`、`npm run build`；项目没有 `npm test` 脚本，测试用 `node --import tsx --test $(find src server -name '*.test.ts' -o -name '*.test.tsx')`。
@@ -43,34 +43,27 @@
 
 2026-10-30 取消 AI 静默降级：无可用引擎返回 503、AI 失败返回 502；页面可选引擎并显示状态，引擎自动探测（API Key → 本机 claude → codex）、提示词与场景表达力增强；build 与 81 个测试通过。2026-11-01 完成上传 mime 补全并在 `server/api.test.ts` 增加断言；81 个测试与 typecheck 通过，未跑 build。
 
-2026-11-03、2026-11-04 与 2026-11-06 在 agent 沙箱实测真实 AI 生成仍受阻：claude 超时/连接被拒，codex 读不到 `~/.codex/config.toml`、初始化权限被拒，均返回 502，无 `usedLLM:true`、无场景标题；2026-11-06 复测日志在 `/tmp/remotion-real-ai-20261106-is7wgnd5/`，项目文件未改，测试服务已全部关闭；2026-11-03 记录在 `docs/real-ai-test-2026-11-03.md`。
+2026-11-05 已完成 ai-video 竖屏 + BGM + 配音真实渲染验证：1080×1920、30fps、900 帧、30 秒，h264 + aac；330Hz BGM 全程存在，880Hz 配音仅在约 1–7 秒窗口，抽帧布局正常；未改源码。
 
-2026-11-05 已完成 ai-video 竖屏 + BGM + 配音真实渲染验证：1080×1920、30fps、900 帧、30 秒，h264 + aac；330Hz BGM 全程存在，880Hz 配音仅在约 1–7 秒窗口，抽帧布局正常；未改源码。浏览器内播放、`loop:false`、配音长于视频、真实人声/长音频仍未测，2026-11-05 只抽 3 帧并目视 8 秒、20 秒两帧。
+2026-11-03、11-04、11-06、11-07 在 agent 沙箱实测真实 AI 生成仍受阻：claude 超时/连接被拒（11-07 为 150 秒超时），codex 读不到 `~/.codex/config.toml`、初始化权限被拒，均返回 502，无 `usedLLM:true`、无场景标题；期间未改代码，测试服务均已关闭（11-07 的 3299 端口无监听）。
 
 生成内容是否贴合需求仍未验证；未新增 quote 场景类型。经理反馈「文字需求 → 视频」仍直接产出预设模板，期望先设置 Remotion 基础参数生成视频再让用户调整，该方向待落实。API 约定见 `docs/api.md`，CLI 验证见 `docs/local-agent.md`。
 
 ## 遗留问题
-- 真实 `usedLLM:true` 未验证：2026-10-31、11-03、11-04、11-06 复测 claude/codex optimize 均返回 502（沙箱内 claude 超时/连接被拒，codex 读不到 `~/.codex/config.toml`、初始化权限被拒），需在本人普通终端按上述命令重跑并记录场景标题，涉及 `server/localAgent.ts`、`server/plan.ts`。
-  - 2026-11-07 复测（沙箱内，PORT=3299，`LLM_PROVIDER=claude-cli|codex-cli`，`LOCAL_AGENT_TIMEOUT_MS=150000`，请求 `{"prompt":"30秒咖啡店宣传片","durationSec":30}`，环境未设 ANTHROPIC_API_KEY 故未测 api）：claude-cli 耗时 150 秒、HTTP 502，`claude 调用超过 150 秒未返回，已终止`；codex-cli 耗时 0 秒、HTTP 502，`Error loading config.toml: Failed to read config file /Users/linmaobang/.codex/config.toml: Operation not permitted (os error 1)`。两次均无 plan，无 usedLLM、无场景标题，**本条仍未解决**。需用户在本人普通终端运行：`cd ~/ClaudeCode/projects/remotion-studio && env -u ANTHROPIC_API_KEY PORT=3299 LLM_PROVIDER=claude-cli npx tsx server/index.ts`，另开终端 `curl -s -m 170 -X POST localhost:3299/api/plan/optimize -H 'content-type: application/json' -d '{"prompt":"30秒咖啡店宣传片","durationSec":30}'`；Ctrl-C 停掉后把 `LLM_PROVIDER` 换成 `codex-cli` 重复一次，记录耗时、`usedLLM` 与场景标题。
-- 经理反馈「文字需求 → 视频」仍直接产出预设模板，未按期望先设置 Remotion 基础参数生成视频再让用户调整，涉及 `src/pages/Create.tsx`、`server/plan.ts`、`src/templates/ai-video/`。
-- 生成内容是否贴合用户需求未验证，涉及 `server/plan.ts` 与 `src/templates/ai-video/`。
-- 未新增 quote 场景类型，涉及 `src/plan/schema.ts` 与 `src/templates/ai-video/`。
-- 真实 `ANTHROPIC_API_KEY` 下的 Claude optimize/refine 未实测，refine 路由仅有单测、未 curl 实测，实现在 `server/llm.ts`、`server/plan.ts`。
-- 编辑器预览起始帧修复（`StableStart`）只做了代码核对，未在真实浏览器目视确认 0:00 与转场起点画面，也未重新渲染导出核验，实现在 `src/templates/shared.tsx`、`src/lib/editor.ts`。
-- 带位移入场动画的图层，暂停在场景起点时叠加层框与画面会短暂对不上，涉及 `src/templates/shared.tsx` 与画布/方案编辑器舞台。
-- 页面检查仍有控制台 404 与站内请求被中止（ERR_ABORTED），2026-11-04 在首页与 `/editor/1e9378c0-202e-4660-b877-9d399a38f609` 复现，来源未追查，涉及首页与 `/create`、`/editor` 页面。
-- ai-video 竖屏 + BGM + 配音仅完成渲染导出验证，浏览器内预览播放未实测，涉及 `src/templates/ai-video/` 与编辑器播放器。
-- `loop:false`、配音长于视频、真实人声/长音频场景未测；2026-11-05 只抽 3 帧并目视 8 秒、20 秒两帧，涉及 `src/templates/ai-video/` 与 `server/render.ts`。
+- 真实 `usedLLM:true` 未验证：2026-11-07 沙箱复测 claude-cli 150 秒超时、codex-cli 读不到 `~/.codex/config.toml`，均 502，需在本人普通终端按上述命令重跑并记录耗时/`usedLLM`/场景标题，涉及 `server/localAgent.ts`、`server/plan.ts`。
+- `api` 引擎（`ANTHROPIC_API_KEY`）路径在受限环境未测，需在有 key 的终端补一次 optimize。
+- 生成内容是否贴合需求仍未验证；`quote` 场景类型尚未实现，见 `src/plan/schema.ts`。
+- 经理反馈「文字需求 → 视频」仍直接产出预设模板，期望先设置 Remotion 基础参数再让用户调整，待落实。
+- 浏览器内播放、`loop:false`、配音长于视频、真实人声/长音频仍未测（2026-11-05 仅抽 3 帧目视）。
 
 ## 负责人
-- 负责人：claude
-- 复核人：codex
+负责人：claude；复核人：codex。
 
 ## 更新记录
-- 2026-11-06：复测真实 usedLLM:true，claude 连接被拒、codex 初始化权限被拒，两者 optimize 均返回 502，日志留存 `/tmp/remotion-real-ai-20261106-is7wgnd5/`，未改项目文件并关闭服务（codex）。
-- 2026-11-05：docs 更新项目记忆 PROJECT.md（linmaobang）。
-- 2026-11-05：完成 ai-video 竖屏 + BGM + 配音真实渲染验证（1080×1920、30fps、900 帧、h264+aac，音轨与抽帧检查通过）（claude）。
-- 2026-11-04：复测 claude/codex optimize 仍 502，记录验证命令与结果（claude）。
-- 2026-11-03：复测真实 AI 生成受阻，记录写入 `docs/real-ai-test-2026-11-03.md`（claude）。
-- 2026-11-01：修复 `/api/upload` mime 补全并在 `server/api.test.ts` 加断言，81 个测试与 typecheck 通过（claude）。
-- 2026-10-30：取消 AI 静默降级（无引擎 503、AI 失败 502），页面可选引擎并显示状态，build 与 81 个测试通过（claude）。
+- 2026-11-07：沙箱内复测 claude-cli / codex-cli optimize，均返回 502（claude 150 秒超时、codex 读不到 `~/.codex/config.toml`），无 `usedLLM:true`；未改代码，后端已停（claude）
+- 2026-11-06：沙箱复测真实 AI 仍 502，日志存 `/tmp/remotion-real-ai-20261106-is7wgnd5/`；更新项目记忆 PROJECT.md（linmaobang）
+- 2026-11-05：完成 ai-video 竖屏 + BGM + 配音真实渲染验证（1080×1920/30fps/900 帧/h264+aac），未改源码（claude）
+- 2026-11-04：沙箱内复测真实 AI optimize，claude/codex 均返回 502（claude）
+- 2026-11-03：沙箱内复测真实 AI，claude 超时/连接被拒、codex 读不到配置，记录在 `docs/real-ai-test-2026-11-03.md`（claude）
+- 2026-11-01：修复 `/api/upload` mime 补全并在 `server/api.test.ts` 增加断言，81 个测试与 typecheck 通过，未跑 build（claude）
+- 2026-10-30：取消 AI 静默降级（无引擎 503、AI 失败 502），页面可选引擎并显示状态；build 与 81 个测试通过（claude）

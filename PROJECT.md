@@ -51,6 +51,7 @@
 
 ## 遗留问题
 - 真实 `usedLLM:true` 未验证：2026-10-31、11-03、11-04、11-06 复测 claude/codex optimize 均返回 502（沙箱内 claude 超时/连接被拒，codex 读不到 `~/.codex/config.toml`、初始化权限被拒），需在本人普通终端按上述命令重跑并记录场景标题，涉及 `server/localAgent.ts`、`server/plan.ts`。
+  - 2026-11-07 复测（沙箱内，PORT=3299，`LLM_PROVIDER=claude-cli|codex-cli`，`LOCAL_AGENT_TIMEOUT_MS=150000`，请求 `{"prompt":"30秒咖啡店宣传片","durationSec":30}`，环境未设 ANTHROPIC_API_KEY 故未测 api）：claude-cli 耗时 150 秒、HTTP 502，`claude 调用超过 150 秒未返回，已终止`；codex-cli 耗时 0 秒、HTTP 502，`Error loading config.toml: Failed to read config file /Users/linmaobang/.codex/config.toml: Operation not permitted (os error 1)`。两次均无 plan，无 usedLLM、无场景标题，**本条仍未解决**。需用户在本人普通终端运行：`cd ~/ClaudeCode/projects/remotion-studio && env -u ANTHROPIC_API_KEY PORT=3299 LLM_PROVIDER=claude-cli npx tsx server/index.ts`，另开终端 `curl -s -m 170 -X POST localhost:3299/api/plan/optimize -H 'content-type: application/json' -d '{"prompt":"30秒咖啡店宣传片","durationSec":30}'`；Ctrl-C 停掉后把 `LLM_PROVIDER` 换成 `codex-cli` 重复一次，记录耗时、`usedLLM` 与场景标题。
 - 经理反馈「文字需求 → 视频」仍直接产出预设模板，未按期望先设置 Remotion 基础参数生成视频再让用户调整，涉及 `src/pages/Create.tsx`、`server/plan.ts`、`src/templates/ai-video/`。
 - 生成内容是否贴合用户需求未验证，涉及 `server/plan.ts` 与 `src/templates/ai-video/`。
 - 未新增 quote 场景类型，涉及 `src/plan/schema.ts` 与 `src/templates/ai-video/`。

@@ -50,6 +50,7 @@
 浏览器内播放、`loop:false`、配音长于视频、真实人声/长音频仍未测；生成内容是否贴合需求仍未验证；未新增 quote 场景类型。经理反馈「文字需求 → 视频」仍直接产出预设模板，期望先设置 Remotion 基础参数生成视频再让用户调整，该方向待落实。API 约定见 `docs/api.md`，CLI 验证见 `docs/local-agent.md`。
 
 ## 遗留问题
+- 2026-11-08 本轮独立复测（codex）：PORT=3299、`LOCAL_AGENT_TIMEOUT_MS=150000`，请求 `{"prompt":"30秒咖啡店宣传片"}`，curl 上限 180 秒。claude-cli 耗时 150.734 秒、HTTP 502，错误为 `claude 调用超过 150 秒未返回，已终止`；codex-cli 耗时 1.001 秒、HTTP 502，stderr 原因含 `could not create PATH aliases: Operation not permitted (os error 1)` 与 `failed to initialize in-process app-server client: Operation not permitted (os error 1)`，本轮未出现 config.toml 读取错误。两次 curl 退出码均为 0，响应均无 `usedLLM`、`provider` 与场景标题；环境未设置 `ANTHROPIC_API_KEY`，故 api 未测。Codex 权限拒绝与沙箱限制一致，Claude 仅确认超时、不能据此断定网络原因；仍需本人普通终端复测，真实 `usedLLM:true` 遗留保留。完整响应、HTTP 头、耗时与后端日志：`/tmp/remotion-real-ai-20261108-3exa1een/`；本次后台服务均已停止，3299 无监听，未改源码。
 - 真实 `usedLLM:true` 未验证：2026-10-31 至 11-08 多次在沙箱复测 claude/codex optimize 均返回 502（claude 超时/连接被拒，codex 读不到 `~/.codex/config.toml`），api 引擎因无 `ANTHROPIC_API_KEY` 未测，需在本人普通终端按「如何运行与验证」命令重跑并记录场景标题，涉及 `server/localAgent.ts`、`server/plan.ts`。
 - 2026-11-08 复测（PORT=3299，`LOCAL_AGENT_TIMEOUT_MS=150000`）claude-cli 151 秒 502 超时、codex-cli 立即 502（config.toml `Operation not permitted`），均无 `usedLLM` 与场景标题，仍需普通终端复测。
 - 2026-11-08 接手任务因前一位执行者额度中断未完成，验证工作需重新安排。
@@ -62,6 +63,7 @@
 负责人：claude；复核人：codex
 
 ## 更新记录
+- 2026-11-08：按指定命令分别启动 claude-cli/codex-cli 后端并 curl 真实 optimize；claude-cli 150.734 秒 502（150 秒 CLI 超时），codex-cli 1.001 秒 502（app-server 初始化 Operation not permitted），均未取得 `usedLLM:true` 或场景标题；无 API Key，api 未测。原始证据见 `/tmp/remotion-real-ai-20261108-3exa1een/summary.json` 及同目录响应/日志；两次服务均已停止、3299 无监听，仅追加本文件「遗留问题」「更新记录」（codex）。
 - 2026-11-08：接手「真实 usedLLM 复测」任务卡，前一位执行者额度中断，验证未完成（dsh）
 - 2026-11-08：沙箱内复测 claude-cli/codex-cli optimize 仍 502，无 `usedLLM`（未记录）
 - 2026-11-07：更新项目记忆 PROJECT.md（linmaobang）

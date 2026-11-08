@@ -49,6 +49,7 @@
 
 ## 遗留问题
 - 真实 `usedLLM:true` 未验证：2026-10-31、11-03、11-04、11-06、11-07 复测 claude/codex optimize 均返回 502（沙箱内 claude 超时/连接被拒，codex 读不到 `~/.codex/config.toml`），api 引擎因无 `ANTHROPIC_API_KEY` 未测，需在本人普通终端按「如何运行与验证」中的命令重跑并记录场景标题，涉及 `server/localAgent.ts`、`server/plan.ts`。
+  - 2026-11-08 复测（沙箱内，PORT=3299，`LOCAL_AGENT_TIMEOUT_MS=150000`，请求 `{"prompt":"30秒咖啡店宣传片"}`，未设 ANTHROPIC_API_KEY 故未测 api）：claude-cli 耗时 151 秒、HTTP 502，`claude 调用超过 150 秒未返回，已终止`；codex-cli 耗时 0 秒、HTTP 502，`Error loading config.toml: Failed to read config file /Users/linmaobang/.codex/config.toml: Operation not permitted (os error 1)`；均无 usedLLM、无场景标题，**本条仍未解决**，需用户在本人普通终端按上述命令重跑。
 - 2026-11-07 自动检查发现首页一个资源 404、编辑器页一个 `/api/projects/...` 请求被中止（`net::ERR_ABORTED`），均未深查，位置在前端首页与编辑器页。
 - 浏览器内播放、`loop:false`、配音长于视频、真实人声/长音频未验证，2026-11-05 只抽 3 帧目视，涉及 `src/templates/ai-video` 与渲染音轨。
 - 生成内容是否贴合需求未验证；`quote` 场景类型未实现，涉及 `src/plan/schema.ts`。
@@ -58,6 +59,7 @@
 负责人：claude；复核人：codex
 
 ## 更新记录
+- 2026-11-08：复测真实 usedLLM:true，claude-cli 超时（151 秒，502）、codex-cli 读不到 `~/.codex/config.toml`（502），均无 usedLLM:true，遗留保留；已停止测试服务，3299 无监听（claude）。
 - 2026-11-07：以 tester 岗位在沙箱复测 claude-cli/codex-cli 的 `/api/plan/optimize`，均返回 502（claude 150 秒超时，codex 读不到 `~/.codex/config.toml`），未获 `usedLLM:true`；未改代码，仅更新 PROJECT.md（claude）
 - 2026-11-06：更新项目记忆 PROJECT.md（linmaobang）
 - 2026-11-05：完成 ai-video 竖屏 1080×1920 + BGM + 配音真实渲染验证，h264+aac、30 秒、抽帧正常（执行人未记录）

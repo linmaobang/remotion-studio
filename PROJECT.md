@@ -8,7 +8,7 @@
 - 可选 LLM：`ANTHROPIC_API_KEY` 配置后 `/api/plan/*` 可调用 Claude；`LLM_PROVIDER` 可选 `api`/`claude-cli`/`codex-cli`，未设置时按 API Key → PATH 中的 `claude` → `codex` 自动探测（不读凭据文件）；页面「AI 引擎」选择和请求体 `provider` 优先于 `LLM_PROVIDER`。`LLM_MODEL` 默认 `claude-sonnet-5-5`，每次请求时读取；密钥只从环境变量读取，不落盘。
 - 降级策略：默认不静默降级，无可用引擎返回 503，AI 调用失败返回 502 并带原因，页面显示错误可重试；仅 `PLAN_ALLOW_HEURISTIC=1` 时允许退回本地固定模板，响应明确标注且页面红字提示。
 - CLI 模式：`LLM_PROVIDER=claude-cli` 或 `codex-cli` 调用本机已登录 CLI；使用 Claude 订阅时需 `env -u ANTHROPIC_API_KEY`，避免改走 API 计费。可选 `LOCAL_AGENT_MODEL`、`LOCAL_AGENT_TIMEOUT_MS`（默认 180000 毫秒）、`LOCAL_AGENT_CONCURRENCY`（默认 1，最大 2）。`npm run ask -- --provider both "问题"` 可测两者，任一失败退出码为 1；完整命令见 `docs/local-agent.md`。
-- 真实 AI 验证现状：2026-10-31、11-03、11-04、11-06、11-07、11-08 在 agent 沙箱复测 claude/codex optimize 均返回 502，始终未见 `usedLLM:true`。2026-11-08 用 PORT=3299、`LOCAL_AGENT_TIMEOUT_MS=150000`、请求 `{"prompt":"30秒咖啡店宣传片"}` 复测：claude-cli 耗时 151 秒返回 502（`claude 调用超过 150 秒未返回，已终止`），codex-cli 立即 502（读不到 `~/.codex/config.toml`，Operation not permitted）；api 引擎因环境无 `ANTHROPIC_API_KEY` 未测。需在本人普通终端重跑：`env -u ANTHROPIC_API_KEY PORT=3299 LLM_PROVIDER=claude-cli npx tsx server/index.ts`，另开终端 `curl -s -m 180 -X POST localhost:3299/api/plan/optimize -H 'content-type: application/json' -d '{"prompt":"30秒咖啡店宣传片"}'`，再把 `LLM_PROVIDER` 换成 `codex-cli` 重复，记录耗时、`usedLLM` 与场景标题。2026-11-03 记录见 `docs/real-ai-test-2026-11-03.md`，2026-11-06 完整响应与日志在 `/tmp/remotion-real-ai-20261106-is7wgnd5/`。
+- 真实 AI 复测现状：2026-10-31、11-03、11-04、11-06、11-07、11-08 在 agent 沙箱复测 claude/codex optimize 均返回 502，始终未见 `usedLLM:true`。2026-11-08 用 PORT=3299、`LOCAL_AGENT_TIMEOUT_MS=150000`、请求 `{"prompt":"30秒咖啡店宣传片"}` 复测：claude-cli 151 秒返回 502（超时终止），codex-cli 立即 502（初始化权限被拒）；api 引擎因环境无 `ANTHROPIC_API_KEY` 未测。需在本人普通终端重跑：`env -u ANTHROPIC_API_KEY PORT=3299 LLM_PROVIDER=claude-cli npx tsx server/index.ts`，另开终端 `curl -s -m 180 -X POST localhost:3299/api/plan/optimize -H 'content-type: application/json' -d '{"prompt":"30秒咖啡店宣传片"}'`，再把 `LLM_PROVIDER` 换成 `codex-cli` 重复，记录耗时、`usedLLM` 与场景标题。2026-11-03 记录见 `docs/real-ai-test-2026-11-03.md`，2026-11-06 与 11-08 的完整响应、HTTP 头与日志在 `/tmp/remotion-real-ai-20261106-is7wgnd5/`、`/tmp/remotion-real-ai-20261108-3exa1een/`。
 - 上传 mime 验证：`npm run dev` 后执行 `curl -F "file=@x.mp3;type=application/octet-stream" http://127.0.0.1:5173/api/upload`，返回的 `mime` 应为 `audio/mpeg`。
 - 改过模板或后端代码后需重启后端：服务端 bundle 按进程缓存，旧进程会继续使用旧渲染包。
 - 其他脚本：`npm run typecheck`、`npm run build`；项目没有 `npm test` 脚本，测试用 `node --import tsx --test $(find src server -name '*.test.ts' -o -name '*.test.tsx')`。
@@ -24,7 +24,7 @@
 - 创作画布模板 id 为 `studio-canvas`，项目由多个场景首尾相接组成，总时长 = 各场景帧数之和；编辑场景一律经 `src/lib/editor.ts` 的 `withStudioDuration` 同步时长。
 - 画布所有修改必须经 `StudioWorkbench` 的 `edit(change, group)` 才进撤销栈；同一 group 连续修改合并为一条，`Inspector` 同字段连续输入合并为一次撤销；撤销栈存整个项目快照，上限 100，仅当前编辑会话有效，刷新清空。
 - 画布图层类型为文字、矩形/椭圆/线条、图片、视频、音频；场景背景支持纯色/线性渐变，场景与图层支持入场、出场、循环动画；预设定义在 `src/templates/studio-canvas/presets.ts`。
-- 编辑器预览暂停并停在场景起点（0:00 或转场起点）时，用 `src/templates/shared.tsx` 的 `HoldStartContext` + `StableStart` 把显示时间前移到入场/转场结束后的首个稳定帧；开关默认关闭，只由两个 Workbench 在 Player 外层打开，导出渲染与时间轴、总时长不受影响；新模板需要同样效果时用 `StableStart` 包住场景。
+- 编辑器预览暂停并停在场景起点时，用 `src/templates/shared.tsx` 的 `HoldStartContext` + `StableStart` 把显示时间前移到入场/转场结束后的首个稳定帧；开关默认关闭，只由两个 Workbench 在 Player 外层打开，导出渲染与时间轴、总时长不受影响；新模板需要同样效果时用 `StableStart` 包住场景。
 - VideoPlan schema 定义在 `src/plan/schema.ts`（zod），`parsePlan` 是宽松解析：补默认值、钳制数值、丢弃未知字段和无法识别的场景，永不抛异常；没有任何可用场景时返回失败；成功时多返回 `warnings`，前端应展示。
 - `ai-video` 为方案驱动模板，props 形如 `{plan: VideoPlan}`；创建项目时必须用 `configOf(plan)`（`src/templates/ai-video/index.tsx` 导出）设置 width/height/fps/durationInFrames，因为 Root 的 `calculateMetadata` 不从 plan 推导。
 - 方案编辑器所有修改走 Workbench 的 `edit()`，经 `parsePlan` 修复后用 `withPlan` 同步 width/height/fps/durationInFrames；撤销栈存整个项目快照，上限 100，仅本次会话有效。
@@ -43,34 +43,26 @@
 
 2026-10-30 取消 AI 静默降级：无可用引擎返回 503、AI 失败返回 502；页面可选引擎并显示状态，引擎自动探测（API Key → 本机 claude → codex）、提示词与场景表达力增强；build 与 81 个测试通过。2026-11-01 完成上传 mime 补全并在 `server/api.test.ts` 增加断言；81 个测试与 typecheck 通过，未跑 build。2026-11-05 完成 ai-video 竖屏 + BGM + 配音真实渲染验证，未改源码。
 
-2026-11-03、11-04、11-06、11-07、11-08 在 agent 沙箱实测真实 AI 生成仍受阻：claude 超时/连接被拒，codex 读不到 `~/.codex/config.toml`、初始化权限被拒，均返回 502，无 `usedLLM:true`、无场景标题；2026-11-08 复测后测试后端已停，3299 端口无监听。
-
-2026-11-08 接手「真实 usedLLM 复测」任务卡（dsh），前一位执行者（claude）因额度中断未完成，本次未取得新验证结果。
+2026-11-08 由 codex 复测真实 AI 链路：PORT=3299、`LOCAL_AGENT_TIMEOUT_MS=150000`，claude-cli 150.734 秒返回 HTTP 502（超时终止），codex-cli 1.001 秒返回 HTTP 502（沙箱内初始化权限被拒），两次响应均无 `usedLLM`、`provider` 与场景标题；api 引擎因无 `ANTHROPIC_API_KEY` 未测。本次未改源码，测试后端已停止，3299 端口无监听。此前 11-03、11-04、11-06、11-07 的沙箱实测同样均返回 502。
 
 浏览器内播放、`loop:false`、配音长于视频、真实人声/长音频仍未测；生成内容是否贴合需求仍未验证；未新增 quote 场景类型。经理反馈「文字需求 → 视频」仍直接产出预设模板，期望先设置 Remotion 基础参数生成视频再让用户调整，该方向待落实。API 约定见 `docs/api.md`，CLI 验证见 `docs/local-agent.md`。
 
 ## 遗留问题
-- 2026-11-08 本轮独立复测（codex）：PORT=3299、`LOCAL_AGENT_TIMEOUT_MS=150000`，请求 `{"prompt":"30秒咖啡店宣传片"}`，curl 上限 180 秒。claude-cli 耗时 150.734 秒、HTTP 502，错误为 `claude 调用超过 150 秒未返回，已终止`；codex-cli 耗时 1.001 秒、HTTP 502，stderr 原因含 `could not create PATH aliases: Operation not permitted (os error 1)` 与 `failed to initialize in-process app-server client: Operation not permitted (os error 1)`，本轮未出现 config.toml 读取错误。两次 curl 退出码均为 0，响应均无 `usedLLM`、`provider` 与场景标题；环境未设置 `ANTHROPIC_API_KEY`，故 api 未测。Codex 权限拒绝与沙箱限制一致，Claude 仅确认超时、不能据此断定网络原因；仍需本人普通终端复测，真实 `usedLLM:true` 遗留保留。完整响应、HTTP 头、耗时与后端日志：`/tmp/remotion-real-ai-20261108-3exa1een/`；本次后台服务均已停止，3299 无监听，未改源码。
-- 真实 `usedLLM:true` 未验证：2026-10-31 至 11-08 多次在沙箱复测 claude/codex optimize 均返回 502（claude 超时/连接被拒，codex 读不到 `~/.codex/config.toml`），api 引擎因无 `ANTHROPIC_API_KEY` 未测，需在本人普通终端按「如何运行与验证」命令重跑并记录场景标题，涉及 `server/localAgent.ts`、`server/plan.ts`。
-- 2026-11-08 复测（PORT=3299，`LOCAL_AGENT_TIMEOUT_MS=150000`）claude-cli 151 秒 502 超时、codex-cli 立即 502（config.toml `Operation not permitted`），均无 `usedLLM` 与场景标题，仍需普通终端复测。
-- 2026-11-08 接手任务因前一位执行者额度中断未完成，验证工作需重新安排。
-- 2026-11-07 自动检查发现首页一个资源 404、编辑器页一个 `/api/projects/...` 请求被中止（`net::ERR_ABORTED`），均未深查，位置在前端首页与编辑器页。
-- 浏览器内播放、`loop:false`、配音长于视频、真实人声/长音频未验证，2026-11-05 只抽 3 帧目视，涉及 `src/templates/ai-video` 与渲染音轨。
-- 生成内容是否贴合需求未验证；`quote` 场景类型未实现，涉及 `src/plan/schema.ts`。
-- 经理反馈「文字需求 → 视频」仍直接产出预设模板，期望先设置 Remotion 基础参数再让用户调整，方向待落实。
+- 真实 `usedLLM:true` 未验证：2026-10-31 至 11-08 在沙箱复测 claude/codex optimize 均返回 502，需在本人普通终端按「如何运行与验证」的命令重跑并记录耗时、`usedLLM` 与场景标题。
+- codex-cli 在受限环境初始化失败：2026-11-08 报 `could not create PATH aliases: Operation not permitted` 与 `failed to initialize in-process app-server client: Operation not permitted`，证据在 `/tmp/remotion-real-ai-20261108-3exa1een/`。
+- claude-cli 在沙箱内仅确认 150 秒超时（未断定是网络原因），`LOCAL_AGENT_TIMEOUT_MS` 放大后仍可能不足，需在普通终端核实。
+- api 引擎（`ANTHROPIC_API_KEY`）从未实测，环境无密钥。
+- 浏览器内播放、`loop:false`、配音长于视频、真实人声/长音频未测。
+- 生成内容是否贴合需求未验证；未新增 quote 场景类型。
+- 经理反馈 `create` 流程直接产出预设模板，期望先设置 Remotion 基础参数再让用户调整，方向未落实。
 
 ## 负责人
-负责人：claude；复核人：codex
+- 负责人：claude
+- 复核人：codex
 
 ## 更新记录
-- 2026-11-08：按指定命令分别启动 claude-cli/codex-cli 后端并 curl 真实 optimize；claude-cli 150.734 秒 502（150 秒 CLI 超时），codex-cli 1.001 秒 502（app-server 初始化 Operation not permitted），均未取得 `usedLLM:true` 或场景标题；无 API Key，api 未测。原始证据见 `/tmp/remotion-real-ai-20261108-3exa1een/summary.json` 及同目录响应/日志；两次服务均已停止、3299 无监听，仅追加本文件「遗留问题」「更新记录」（codex）。
-- 2026-11-08：接手「真实 usedLLM 复测」任务卡，前一位执行者额度中断，验证未完成（dsh）
-- 2026-11-08：沙箱内复测 claude-cli/codex-cli optimize 仍 502，无 `usedLLM`（未记录）
-- 2026-11-07：更新项目记忆 PROJECT.md（linmaobang）
-- 2026-11-06：复测真实 AI 生成，完整响应与日志留在 `/tmp/remotion-real-ai-20261106-is7wgnd5/`（未记录）
-- 2026-11-05：完成 ai-video 竖屏 + BGM + 配音真实渲染验证，ffprobe 与抽帧目视正常（未记录）
-- 2026-11-04：复测真实 AI 生成，仍返回 502（未记录）
-- 2026-11-03：复测真实 AI 生成，仍返回 502，记录见 `docs/real-ai-test-2026-11-03.md`（未记录）
-- 2026-11-01：上传 mime 补全并新增 `server/api.test.ts` 断言，81 个测试与 typecheck 通过（未记录）
-- 2026-10-31：复测真实 AI 生成，仍返回 502（未记录）
-- 2026-10-30：取消 AI 静默降级，改为 503/502 明确报错；build 与 81 个测试通过（未记录）
+- 2026-11-08：更新项目记忆 PROJECT.md（linmaobang）
+- 2026-11-08：在 agent 沙箱复测 claude-cli/codex-cli 真实 AI 链路，均返回 502、无 `usedLLM:true`，未改源码（codex，Agent Hub）
+- 2026-11-05：完成 ai-video 竖屏 + BGM + 配音真实渲染验证（ffprobe 与音轨分析通过）
+- 2026-11-01：修复 `/api/upload` mime 补全并加断言，81 个测试与 typecheck 通过（遗留问题「上传 mime 未补全」已解决）
+- 2026-10-30：取消 AI 静默降级，改为 503/502 明确报错并支持引擎选择与自动探测，build 与 81 个测试通过

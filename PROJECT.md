@@ -1,18 +1,18 @@
 # remotion-studio
 
 ## 项目简介
-基于 Remotion 官方包搭建的本机可视化视频创作网站：可浏览模板、实时预览、修改参数、做简单剪辑并导出 MP4，也可从空白画布自由创作多场景视频。同时提供「文字需求 → 视频」闭环：输入需求（可附图片/音乐/配音）→ 后端调用 Anthropic API 或本机 Claude Code/Codex CLI 优化为 VideoPlan 分镜方案（AI 引擎自动探测：API Key → 本机 claude → codex；不可用或失败时明确报错，不再静默套用固定模板；仅 `PLAN_ALLOW_HEURISTIC=1` 时允许显式降级）→ 在方案编辑器中预览、拖拽调整 → 导出带音轨的 MP4。同一仓库包含 Vite + React + TypeScript 前端与 Express 渲染服务，代码位于 `~/ClaudeCode/projects/remotion-studio/`。仅本地个人学习/自用，服务只监听 `127.0.0.1`，本期不做线上部署。首页版式借鉴「分类 + 卡片 + 标签 + Prompt」信息架构，视觉与内容自行设计。
+基于 Remotion 官方包的本机可视化视频创作网站：可浏览模板、实时预览、修改参数、做简单剪辑并导出 MP4，也可从空白画布自由创作多场景视频。提供「文字需求 → 视频」闭环：输入需求（可附图片/音乐/配音）→ 后端调用 Anthropic API 或本机 Claude Code/Codex CLI 优化为 VideoPlan 分镜方案（AI 引擎自动探测：API Key → 本机 claude → codex；不可用或失败时明确报错，不再静默套用固定模板；仅 `PLAN_ALLOW_HEURISTIC=1` 时允许显式降级）→ 在方案编辑器中预览、拖拽调整 → 导出带音轨的 MP4。同一仓库包含 Vite + React + TypeScript 前端与 Express 渲染服务，代码位于 `~/ClaudeCode/projects/remotion-studio/`。仅本地个人学习/自用，服务只监听 `127.0.0.1`，本期不做线上部署。首页版式借鉴「分类 + 卡片 + 标签 + Prompt」信息架构，视觉与内容自行设计。
 
 ## 如何运行与验证
 - 安装与启动：`npm install` 后 `npm run dev`。前端 Vite `http://127.0.0.1:5173`（已设 `strictPort`），后端 Express `http://127.0.0.1:3217`，Vite 将 `/api` 与 `/files` 代理到后端；`PORT=3218 npm run dev` 可同步覆盖后端与代理端口。
 - 可选 LLM：`ANTHROPIC_API_KEY` 配置后 `/api/plan/*` 可调用 Claude；`LLM_PROVIDER` 可选 `api`/`claude-cli`/`codex-cli`，未设置时按 API Key → PATH 中的 `claude` → `codex` 自动探测（不读凭据文件）；页面「AI 引擎」选择和请求体 `provider` 优先于 `LLM_PROVIDER`。`LLM_MODEL` 默认 `claude-sonnet-5-5`，每次请求时读取；密钥只从环境变量读取，不落盘。
 - 降级策略：默认不静默降级，无可用引擎返回 503，AI 调用失败返回 502 并带原因，页面显示错误可重试；仅 `PLAN_ALLOW_HEURISTIC=1` 时允许退回本地固定模板，响应明确标注且页面红字提示。
 - CLI 模式：`LLM_PROVIDER=claude-cli` 或 `codex-cli` 调用本机已登录 CLI；使用 Claude 订阅时需 `env -u ANTHROPIC_API_KEY`，避免改走 API 计费。可选 `LOCAL_AGENT_MODEL`、`LOCAL_AGENT_TIMEOUT_MS`（默认 180000 毫秒）、`LOCAL_AGENT_CONCURRENCY`（默认 1，最大 2）。`npm run ask -- --provider both "问题"` 可测两者，任一失败退出码为 1；完整命令见 `docs/local-agent.md`。
-- 真实 AI 验证现状：2026-10-31、11-03、11-04、11-06、11-07、11-08 在 agent 沙箱复测 claude/codex optimize 均返回 502，始终未见 `usedLLM:true`。2026-11-08 用 PORT=3299、`LOCAL_AGENT_TIMEOUT_MS=150000` 请求 `{"prompt":"30秒咖啡店宣传片"}`：claude-cli 耗时约 151 秒返回 502（超时终止），codex-cli 立即 502（`could not create PATH aliases` / `failed to initialize in-process app-server client: Operation not permitted`）；api 引擎因环境无 `ANTHROPIC_API_KEY` 未测。需在本人普通终端重跑：`env -u ANTHROPIC_API_KEY PORT=3299 LLM_PROVIDER=claude-cli npx tsx server/index.ts`，另开终端 `curl -s -m 180 -X POST localhost:3299/api/plan/optimize -H 'content-type: application/json' -d '{"prompt":"30秒咖啡店宣传片"}'`，再把 `LLM_PROVIDER` 换成 `codex-cli` 重复，记录耗时、`usedLLM` 与场景标题。2026-11-03 记录见 `docs/real-ai-test-2026-11-03.md`，11-06 响应与日志在 `/tmp/remotion-real-ai-20261106-is7wgnd5/`，11-08 完整响应、HTTP 头、耗时与后端日志在 `/tmp/remotion-real-ai-20261108-3exa1een/`。
+- 真实 AI 验证现状：2026-10-31 至 11-08 在 agent 沙箱复测 claude/codex optimize 均返回 502，始终未见 `usedLLM:true`。2026-11-08 用 PORT=3299、`LOCAL_AGENT_TIMEOUT_MS=150000` 请求 `{"prompt":"30秒咖啡店宣传片"}`：claude-cli 耗时约 151 秒返回 502（超时终止），codex-cli 立即 502（`could not create PATH aliases` / `failed to initialize in-process app-server client: Operation not permitted`）；api 引擎因环境无 `ANTHROPIC_API_KEY` 未测。需在本人普通终端重跑：`env -u ANTHROPIC_API_KEY PORT=3299 LLM_PROVIDER=claude-cli npx tsx server/index.ts`，另开终端 `curl -s -m 180 -X POST localhost:3299/api/plan/optimize -H 'content-type: application/json' -d '{"prompt":"30秒咖啡店宣传片"}'`，再把 `LLM_PROVIDER` 换成 `codex-cli` 重复，记录耗时、`usedLLM` 与场景标题。2026-11-03 记录见 `docs/real-ai-test-2026-11-03.md`，11-06 响应与日志在 `/tmp/remotion-real-ai-20261106-is7wgnd5/`，11-08 完整响应、HTTP 头、耗时与后端日志在 `/tmp/remotion-real-ai-20261108-3exa1een/`。
 - 上传 mime 验证：`npm run dev` 后执行 `curl -F "file=@x.mp3;type=application/octet-stream" http://127.0.0.1:5173/api/upload`，返回的 `mime` 应为 `audio/mpeg`。
 - 改过模板或后端代码后需重启后端：服务端 bundle 按进程缓存，旧进程会继续使用旧渲染包。
 - 其他脚本：`npm run typecheck`、`npm run build`；项目没有 `npm test` 脚本，测试用 `node --import tsx --test $(find src server -name '*.test.ts' -o -name '*.test.tsx')`。
-- 已通过：2026-10-30 build 与 81 个测试；端到端「上传 → 优化 → 建项目 → 渲染」跑通（当时无 key、走本地规则兜底），导出 10 秒 1080p h264+aac MP4。2026-11-01 上传 mime 修复后 src 与 server 全部测试 81 个通过、typecheck 通过，未跑 build。
+- 已通过：2026-10-30 build 与 81 个测试；端到端「上传 → 优化 → 建项目 → 渲染」跑通（当时无 key、走本地规则兜底），导出 10 秒 1080p h264+aac MP4。2026-11-01 上传 mime 修复后 src 与 server 全部测试 81 个通过、typecheck 通过，未跑 build。2026-11-10 排查后 build 通过、81 个测试通过，首页与 `/create` 无 404，编辑器页只剩正常取消。
 - 2026-11-05 ai-video 竖屏 + BGM + 配音真实渲染验证：`samplePlan()` 改 1080×1920/30fps，BGM 为 330Hz 正弦 mp3（音量 0.5、loop），配音为 880Hz 正弦 wav（startFrame 30）；经 `POST /api/upload` → `POST /api/projects`（templateId `ai-video`）→ `POST /api/render` 轮询到 done（PORT=3217，约 1 分钟）。产物 `data/renders/3ce9df0c-3fe8-45b1-a897-c38864dfe2e7.mp4`；ffprobe：h264 1080×1920、30fps、900 帧、30.0 秒，另有 aac 音轨 30.016 秒；volumedetect mean -27.8 dB、max -17.6 dB；带通分析 330Hz 全程存在，880Hz 仅在约 1–7 秒窗口出现；抽 3 帧，目视 8 秒与 20 秒两帧布局正常。渲染时项目的 width/height/fps/durationInFrames 需与 plan 一致。
 - ai-video 用 samplePlan 真实渲染 1920×1080、30fps、900 帧 h264 MP4，5 个场景抽帧目视正常；studio-canvas 两场景样例真实渲染成功；首页创建、加图层、两场景、导出 MP4 成功。首次导出需联网下载 Chrome Headless Shell（Remotion 自动完成，缓存于 `node_modules/.remotion`）。
 - 端口被占用时先用 `lsof -nP -iTCP:端口 -sTCP:LISTEN` 确认占用进程，不要按名字批量杀进程（早期按名字 `pkill` 曾误杀其他项目进程）。
@@ -42,31 +42,32 @@
 ## 当前状态
 项目主体功能已完成：脚手架与共享契约、内置模板（含 `studio-canvas` 创作画布）、首页模板库与创作入口、后端项目存取/上传/渲染、创作页、创作画布工作台、集成联调；文字需求 → 视频闭环（VideoPlan schema、`ai-video` 模板、`/api/plan/optimize|refine`、`/create` 两种自动化模式、方案编辑器）。
 
+2026-11-10 完成首页 404 与编辑器页 `ERR_ABORTED` 排查：首页 404 为浏览器请求 `/favicon.ico`，已在 `index.html` 加内联 SVG 图标消除；编辑器页 `GET /api/projects/<id>` 的 `ERR_ABORTED` 确认为 React StrictMode 双挂载下 `useProject` 的 `AbortController` 正常取消，不改代码。修复后首页与 `/create` 无 404，编辑器页只剩该正常取消；build 通过、81 个测试通过，未跑 `npm test`（无该脚本）。本轮前后端已停。首页曾出现一次 `@remotion_three.js` 的 `ERR_ABORTED`，之后两轮未复现，判断为 Vite 依赖重优化的一次性现象，未单独验证。
+
 2026-10-30 取消 AI 静默降级：无可用引擎返回 503、AI 失败返回 502；页面可选引擎并显示状态，引擎自动探测（API Key → 本机 claude → codex）、提示词与场景表达力增强；build 与 81 个测试通过。2026-11-01 完成上传 mime 补全并在 `server/api.test.ts` 增加断言；81 个测试与 typecheck 通过，未跑 build。2026-11-05 完成 ai-video 竖屏 + BGM + 配音真实渲染验证，未改源码。
 
-2026-11-03、11-04、11-06、11-07、11-08 在 agent 沙箱实测真实 AI 生成仍受阻：claude 超时/连接被拒，codex 初始化权限被拒（11-08 报 PATH aliases 与 in-process app-server 初始化被拒），均返回 502，无 `usedLLM:true`、无场景标题。2026-11-08 复测结束后测试后端已停，3299 端口无监听；本轮未改源码。
+2026-10-31、11-03、11-04、11-06、11-07、11-08 在 agent 沙箱实测真实 AI 生成仍受阻：claude 超时/连接被拒，codex 初始化权限被拒（11-08 报 PATH aliases 与 in-process app-server 初始化被拒），均返回 502，无 `usedLLM:true`、无场景标题。2026-11-08 复测结束后测试后端已停，3299 端口无监听；本轮未改源码。
 
 浏览器内播放、`loop:false`、配音长于视频、真实人声/长音频仍未测；生成内容是否贴合需求仍未验证；未新增 quote 场景类型。经理反馈「文字需求 → 视频」仍直接产出预设模板，期望先设置 Remotion 基础参数生成视频再让用户调整，该方向待落实。API 约定见 `docs/api.md`，CLI 验证见 `docs/local-agent.md`。
 
 ## 遗留问题
 - 真实 `usedLLM:true` 未验证：2026-10-31 至 11-08 多次在沙箱复测 claude/codex optimize 均返回 502，api 引擎因无 `ANTHROPIC_API_KEY` 未测，需在本人普通终端按「如何运行与验证」命令重跑并记录耗时、`usedLLM` 与场景标题。
 - 沙箱内 CLI 调用受限：codex 报 `could not create PATH aliases` / `failed to initialize in-process app-server client: Operation not permitted`（`/tmp/remotion-real-ai-20261108-3exa1een/`），claude 仅确认超过 150 秒超时，无法据此断定网络原因，需在普通终端复测区分。
-- 「文字需求 → 视频」生成内容与需求贴合度未验证，且当前仍直接产出预设模板，经理期望的「先设基础参数生成再调整」方向未落实。
+- 「文字需求 → 视频」生成内容与需求贴合度未验证，且当前仍直接产出预设模板，经理期望的「先设基础参数生成再调整」方向未落实（`/create` 与 `/api/plan/*`）。
 - 播放侧与音频边界未测：浏览器内播放、`loop:false`、配音长于视频、真实人声/长音频均无验证记录。
-- 未新增 quote 场景类型（`src/plan/schema.ts` 与 `ai-video` 模板均未涉及）。
+- 首页曾出现一次 `@remotion_three.js` 的 `ERR_ABORTED`，判断为 Vite 依赖重优化的一次性现象，未单独验证；`/tmp/probe.cjs`（本机 Chrome + playwright-core）可复测。
 
 ## 负责人
-- 负责人：claude
-- 复核人：codex
+负责人：claude；复核人：codex。
 
 ## 更新记录
-- 2026-11-08：更新项目记忆 PROJECT.md（linmaobang）
-- 2026-11-08：复测真实 AI 链路，claude-cli 超时、codex-cli 权限被拒，均 502、无 `usedLLM:true`，未改源码（codex，Agent Hub）
-- 2026-11-08：沙箱复测真实 AI 仍失败，记录响应与日志，测试后端已停止（claude）
-- 2026-11-07：沙箱复测 claude/codex optimize 仍返回 502（claude）
-- 2026-11-06：沙箱复测真实 AI 仍 502，完整响应与日志存 `/tmp/remotion-real-ai-20261106-is7wgnd5/`（claude）
-- 2026-11-05：完成 ai-video 竖屏 + BGM + 配音真实渲染验证，ffprobe 与抽帧核验通过（claude）
-- 2026-11-04：沙箱复测真实 AI 仍返回 502（claude）
-- 2026-11-03：沙箱复测真实 AI 返回 502，记录见 `docs/real-ai-test-2026-11-03.md`（claude）
-- 2026-11-01：修复 `/api/upload` 的 mime 补全（`server/upload.ts` 的 `resolveMime`）并加断言，81 个测试与 typecheck 通过，未跑 build（claude）
-- 2026-10-30：取消 AI 静默降级（503/502）、页面可选引擎并自动探测，build 与 81 个测试通过（claude）
+- 2026-11-10：排查首页 404 与编辑器页 `ERR_ABORTED`，确认 favicon 与 StrictMode 正常取消；build 与 81 个测试通过（claude）。
+- 2026-11-08：docs(project): 更新项目记忆 PROJECT.md（linmaobang）。
+- 2026-11-08：沙箱复测 claude/codex optimize 仍返回 502，未改源码（claude）。
+- 2026-11-07：自动检查发现首页资源 404 与编辑器页请求中止，未深查（自动检查）。
+- 2026-11-05：完成 ai-video 竖屏 + BGM + 配音真实渲染验证，未改源码（claude）。
+- 2026-11-03：记录真实 AI 测试到 `docs/real-ai-test-2026-11-03.md`（claude）。
+- 2026-11-01：完成上传 mime 补全并增加断言，81 个测试与 typecheck 通过，未跑 build（claude）。
+- 2026-10-31：沙箱复测 claude/codex optimize 返回 502（claude）。
+- 2026-10-30：取消 AI 静默降级，无可用引擎 503、AI 失败 502；build 与 81 个测试通过（claude）。
+- 2026-10-30：端到端「上传 → 优化 → 建项目 → 渲染」跑通，导出 10 秒 1080p h264+aac MP4（claude）。

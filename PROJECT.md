@@ -18,6 +18,7 @@
 - 端口被占用时先用 `lsof -nP -iTCP:端口 -sTCP:LISTEN` 确认占用进程，不要按名字批量杀进程（早期按名字 `pkill` 曾误杀其他项目进程）。
 
 ## 关键决策
+- 控制台 404 的来源是浏览器自动请求 `/favicon.ico`（项目无该文件），已在 `index.html` 用内联 SVG `data:` 图标消除。编辑器页 `GET /api/projects/<id>` 的 `net::ERR_ABORTED` 是正常取消：开发模式 React StrictMode 双挂载时，`useProject`（`src/components/editor/useProject.ts`）的 `AbortController` 清理会中止第一次请求并忽略其结果，第二次请求正常完成；生产构建无此现象，无需修改。
 - Remotion 系列固定 `4.0.539`，zod 固定 `3.22.3`，升级时需同步。
 - Vite 启用 `strictPort`，开发端口固定 5173，端口被占时直接失败而非自动换端口；后端默认端口 3217，支持 `PORT` 环境变量覆盖，Vite 代理同步使用该端口，服务仍只监听 `127.0.0.1`。
 - 新增模板必须在 `src/templates/index.ts` 中显式 import 并追加，不做目录自动扫描；Composition id 即模板 id，预览、首页与 Node 渲染端共用注册表。

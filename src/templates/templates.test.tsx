@@ -158,3 +158,22 @@ test('AI 视频：场景的 emoji / accentColor / enter 会渲染，且不影响
     assert.ok(textOf(markup(template, 5, { plan: variant })).includes('手冲'), enter);
   }
 });
+
+test('AI 视频音频边界：loop:false 保留、缺省为循环；音频长短与起播点极端时各帧渲染不抛错', () => {
+  const template = getTemplate('ai-video')!;
+  const base = { scenes: [{ kind: 'title', title: '音频边界', durationFrames: 60, transition: { type: 'none' } }] };
+  const noLoop = parsePlan({ ...base, audio: { bgm: { src: '/files/uploads/a.mp3', loop: false } } });
+  const dflt = parsePlan({ ...base, audio: { bgm: { src: '/files/uploads/a.mp3' } } });
+  assert.ok(noLoop.ok && dflt.ok);
+  if (!noLoop.ok || !dflt.ok) return;
+  assert.equal(noLoop.plan.audio.bgm?.loop, false);
+  assert.equal(dflt.plan.audio.bgm?.loop, true);
+  // 配音起播点晚于视频结束、早于 0（被钳制）、BGM 音量越界（被钳制）：都不应影响画面渲染。
+  const extreme = parsePlan({ ...base, audio: { bgm: { src: '/files/uploads/a.mp3', volume: 9, loop: false }, voiceover: { src: '/files/uploads/v.wav', startFrame: 100000 } } });
+  assert.ok(extreme.ok);
+  if (!extreme.ok) return;
+  assert.equal(extreme.plan.audio.bgm?.volume, 1);
+  for (const plan of [noLoop.plan, dflt.plan, extreme.plan]) {
+    for (const frame of [0, 30, 59]) assert.ok(textOf(markup(template, frame, { plan })).includes('音频边界'), `frame ${frame}`);
+  }
+});
